@@ -89,7 +89,8 @@ func TestSARIF(t *testing.T) {
 		t.Error("missing fingerprint")
 	}
 	rule := run.Tool.Driver.Rules[r.RuleIndex]
-	if rule.Properties.SecuritySeverity != "9.5" || !contains(rule.Properties.Tags, "external/cwe/cwe-78") {
+	if rule.Properties.SecuritySeverity != "9.5" || !contains(rule.Properties.Tags, "external/cwe/cwe-78") ||
+		!contains(rule.Properties.Tags, "external/owasp/mcp05:2025") {
 		t.Errorf("bad rule properties: %+v", rule.Properties)
 	}
 }

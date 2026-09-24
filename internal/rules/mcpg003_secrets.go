@@ -74,7 +74,8 @@ func (secretRule) Meta() Meta {
 		Remediation: "Remove the secret and rotate it (assume it is compromised). Load credentials from the " +
 			"environment or a secret manager at runtime; in client configs reference variables " +
 			"(e.g. \"${env:GITHUB_TOKEN}\" or the client's input/secret prompt) instead of literal values.",
-		CWE: []string{"CWE-798", "CWE-312"},
+		CWE:   []string{"CWE-798", "CWE-312"},
+		OWASP: []string{"MCP01:2025", "LLM02:2025", "ASI03:2026"},
 	}
 }
 

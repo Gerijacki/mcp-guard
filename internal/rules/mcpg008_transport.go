@@ -37,7 +37,8 @@ func (transportRule) Meta() Meta {
 		Remediation: "Bind to 127.0.0.1 for local use. When remote access is needed, require authentication " +
 			"(MCP authorization / OAuth 2.1, or at least a bearer token checked on every request), validate " +
 			"the Origin and Host headers, and put the server behind TLS.",
-		CWE: []string{"CWE-306", "CWE-1327"},
+		CWE:   []string{"CWE-306", "CWE-1327"},
+		OWASP: []string{"MCP07:2025", "ASI03:2026"},
 	}
 }
 

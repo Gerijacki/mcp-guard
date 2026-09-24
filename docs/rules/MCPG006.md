@@ -1,6 +1,6 @@
 # MCPG006: unscoped-destructive-tool
 
-**Default severity:** medium · **CWE:** [CWE-749](https://cwe.mitre.org/data/definitions/749.html), [CWE-770](https://cwe.mitre.org/data/definitions/770.html)
+**Default severity:** medium · **CWE:** [CWE-749](https://cwe.mitre.org/data/definitions/749.html), [CWE-770](https://cwe.mitre.org/data/definitions/770.html) · **OWASP:** [MCP02, LLM06, ASI02](../owasp.md)
 
 The tool is destructive: it declares `destructiveHint: true`, or its name says it deletes, drops, kills, terminates, executes, transfers or deploys. Its handler has no guard at all: no confirmation step, no allowlist of targets, no dry-run, no size or rate limit. One hallucinated or injected call can do irreversible damage, and an agent loop can repeat it hundreds of times.
 

@@ -1,6 +1,6 @@
 # MCPG005: sql-injection
 
-**Default severity:** high · **CWE:** [CWE-89](https://cwe.mitre.org/data/definitions/89.html)
+**Default severity:** high · **CWE:** [CWE-89](https://cwe.mitre.org/data/definitions/89.html) · **OWASP:** [MCP05, LLM05, ASI02](../owasp.md)
 
 The tool builds a SQL statement with f-strings, `%` formatting, `.format`, concatenation, template literals or `fmt.Sprintf` using a model-controlled value. The model (or an injection) can then read or modify any table the database user can reach: `' OR 1=1 --`, `'; DROP TABLE users; --`. Database MCP servers are popular and often connected with powerful credentials.
 

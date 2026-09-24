@@ -1,6 +1,6 @@
 # MCPG003: hardcoded-secret
 
-**Default severity:** critical (known formats, config credentials), high (generic matches) · **CWE:** [CWE-798](https://cwe.mitre.org/data/definitions/798.html), [CWE-312](https://cwe.mitre.org/data/definitions/312.html)
+**Default severity:** critical (known formats, config credentials), high (generic matches) · **CWE:** [CWE-798](https://cwe.mitre.org/data/definitions/798.html), [CWE-312](https://cwe.mitre.org/data/definitions/312.html) · **OWASP:** [MCP01, LLM02, ASI03](../owasp.md)
 
 An API key, token, password or private key is written in clear text in server source code, an MCP client configuration or an env file. MCP configs are copied between machines, pasted into READMEs and issues, and committed to dotfiles repos. MCP servers usually hold broad credentials (GitHub, cloud, databases, Slack), so a leaked key gives an attacker the same power as the agent.
 

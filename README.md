@@ -83,18 +83,18 @@ The install scripts verify the SHA-256 of the download against the release's `ch
 
 ## Rules
 
-| ID | Name | Severity | Detects |
-|---|---|---|---|
-| [MCPG001](docs/rules/MCPG001.md) | unrestricted-file-access | high | Tool parameter reaches a file read/write/delete with no containment check (path traversal) |
-| [MCPG002](docs/rules/MCPG002.md) | untrusted-content-passthrough | medium | Web/API content returned to the model without marking it untrusted (indirect prompt injection) |
-| [MCPG003](docs/rules/MCPG003.md) | hardcoded-secret | critical | API keys, tokens, passwords and private keys in server code, MCP client configs and `.env` files |
-| [MCPG004](docs/rules/MCPG004.md) | command-injection | critical | Tool parameter reaches a shell, `eval`, or the program name of a process |
-| [MCPG005](docs/rules/MCPG005.md) | sql-injection | high | SQL built with f-strings, concatenation, template literals or `Sprintf` from tool input |
-| [MCPG006](docs/rules/MCPG006.md) | unscoped-destructive-tool | medium | Destructive tool (`destructiveHint`, `delete_*`, `kill_*`…) with no confirmation, allowlist or limit |
-| [MCPG007](docs/rules/MCPG007.md) | tool-poisoning | high | Hidden instructions, `<IMPORTANT>` tags, invisible Unicode, or tool shadowing in descriptions |
-| [MCPG008](docs/rules/MCPG008.md) | exposed-network-transport | medium | HTTP/SSE transport bound to `0.0.0.0` with no authentication |
+| ID | Name | Severity | Detects | OWASP |
+|---|---|---|---|---|
+| [MCPG001](docs/rules/MCPG001.md) | unrestricted-file-access | high | Tool parameter reaches a file read/write/delete with no containment check (path traversal) | MCP02, LLM06, ASI02 |
+| [MCPG002](docs/rules/MCPG002.md) | untrusted-content-passthrough | medium | Web/API content returned to the model without marking it untrusted (indirect prompt injection) | MCP06, LLM01, ASI01 |
+| [MCPG003](docs/rules/MCPG003.md) | hardcoded-secret | critical | API keys, tokens, passwords and private keys in server code, MCP client configs and `.env` files | MCP01, LLM02, ASI03 |
+| [MCPG004](docs/rules/MCPG004.md) | command-injection | critical | Tool parameter reaches a shell, `eval`, or the program name of a process | MCP05, LLM05, ASI05 |
+| [MCPG005](docs/rules/MCPG005.md) | sql-injection | high | SQL built with f-strings, concatenation, template literals or `Sprintf` from tool input | MCP05, LLM05, ASI02 |
+| [MCPG006](docs/rules/MCPG006.md) | unscoped-destructive-tool | medium | Destructive tool (`destructiveHint`, `delete_*`, `kill_*`…) with no confirmation, allowlist or limit | MCP02, LLM06, ASI02 |
+| [MCPG007](docs/rules/MCPG007.md) | tool-poisoning | high | Hidden instructions, `<IMPORTANT>` tags, invisible Unicode, or tool shadowing in descriptions | MCP03, LLM01, ASI01, ASI04 |
+| [MCPG008](docs/rules/MCPG008.md) | exposed-network-transport | medium | HTTP/SSE transport bound to `0.0.0.0` with no authentication | MCP07, ASI03 |
 
-`mcp-guard rules explain <ID>` prints the rationale and the fix for any rule in your terminal. You can add your own rules in YAML ([custom rules](docs/custom-rules.md)).
+Every rule is mapped to the [OWASP MCP Top 10, LLM Top 10 and Agentic Top 10](docs/owasp.md). `mcp-guard rules explain <ID>` prints the rationale and the fix for any rule in your terminal. You can add your own rules in YAML ([custom rules](docs/custom-rules.md)).
 
 ### Supported frameworks
 
@@ -191,7 +191,7 @@ It is a fast, precision-first heuristic analyzer, not a full dataflow engine. Th
 <details>
 <summary><b>SARIF 2.1.0</b> (<code>--format sarif</code>)</summary>
 
-Compatible with GitHub code scanning, GitLab, Azure DevOps and most security dashboards. Rules include `security-severity` scores, CWE tags and help text. Results include `partialFingerprints` so findings are tracked across commits.
+Compatible with GitHub code scanning, GitLab, Azure DevOps and most security dashboards. Rules include `security-severity` scores, CWE and OWASP tags and help text. Results include `partialFingerprints` so findings are tracked across commits.
 </details>
 
 ## CI/CD

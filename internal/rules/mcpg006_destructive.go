@@ -36,7 +36,8 @@ func (destructiveRule) Meta() Meta {
 			"explicit confirmation (MCP elicitation, a confirm parameter, or a dry_run default), cap how many " +
 			"items one call may affect, and rate-limit it. Declare destructiveHint: true so clients can ask " +
 			"the user before running it.",
-		CWE: []string{"CWE-749", "CWE-770"},
+		CWE:   []string{"CWE-749", "CWE-770"},
+		OWASP: []string{"MCP02:2025", "LLM06:2025", "ASI02:2026"},
 	}
 }
 

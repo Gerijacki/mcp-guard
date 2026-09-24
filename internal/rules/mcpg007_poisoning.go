@@ -50,7 +50,8 @@ func (poisoningRule) Meta() Meta {
 			"side effects. Remove directives aimed at the model, references to unrelated files or tools, and " +
 			"any invisible/bidirectional Unicode characters. Review third-party servers' descriptions before " +
 			"installing them and pin their versions.",
-		CWE: []string{"CWE-1427", "CWE-451"},
+		CWE:   []string{"CWE-1427", "CWE-451"},
+		OWASP: []string{"MCP03:2025", "LLM01:2025", "ASI01:2026", "ASI04:2026"},
 	}
 }
 

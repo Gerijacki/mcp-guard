@@ -43,7 +43,8 @@ func (fileAccessRule) Meta() Meta {
 			"explicit allowed root before using it (Python: Path.resolve().is_relative_to(ROOT); " +
 			"Node: path.relative(ROOT, p) must not start with '..'; Go: os.OpenRoot / filepath.IsLocal). " +
 			"Prefer read-only access unless writes are required.",
-		CWE: []string{"CWE-22", "CWE-73"},
+		CWE:   []string{"CWE-22", "CWE-73"},
+		OWASP: []string{"MCP02:2025", "LLM06:2025", "ASI02:2026"},
 	}
 }
 

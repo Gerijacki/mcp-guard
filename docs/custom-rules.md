@@ -25,6 +25,7 @@ rules:
     description: Longer explanation shown by `mcp-guard rules explain` and in SARIF.
     remediation: What to do instead.
     cwe: [CWE-284]
+    owasp: [MCP02:2025, ASI02:2026]  # optional: OWASP MCP/LLM/Agentic Top 10 ids (docs/owasp.md)
     help-url: https://wiki.acme.example/security/mcp
 ```
 

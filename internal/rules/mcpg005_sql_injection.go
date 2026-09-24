@@ -36,7 +36,8 @@ func (sqlInjectionRule) Meta() Meta {
 		Remediation: "Use parameterized queries (cursor.execute(\"... WHERE id = ?\", (id,)), " +
 			"db.query(\"... $1\", [id]), db.Query(\"... ?\", id)). Validate identifiers such as table or " +
 			"column names against an allowlist, and connect with a least-privilege (ideally read-only) user.",
-		CWE: []string{"CWE-89"},
+		CWE:   []string{"CWE-89"},
+		OWASP: []string{"MCP05:2025", "LLM05:2025", "ASI02:2026"},
 	}
 }
 

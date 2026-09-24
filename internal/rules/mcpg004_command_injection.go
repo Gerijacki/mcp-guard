@@ -70,7 +70,8 @@ func (commandInjectionRule) Meta() Meta {
 			"list (subprocess.run([...]) without shell=True, execFile/spawn without shell, exec.Command " +
 			"with separate args), validate arguments against an allowlist, and pass user values after " +
 			"'--' so they cannot become flags. Remove eval/exec of tool input entirely.",
-		CWE: []string{"CWE-78", "CWE-94"},
+		CWE:   []string{"CWE-78", "CWE-94"},
+		OWASP: []string{"MCP05:2025", "LLM05:2025", "ASI05:2026"},
 	}
 }
 

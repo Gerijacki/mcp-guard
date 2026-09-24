@@ -318,6 +318,9 @@ func runRules(args []string, stdout, stderr io.Writer) int {
 		if len(m.CWE) > 0 {
 			fmt.Fprintf(stdout, "References: %s\n", strings.Join(m.CWE, ", "))
 		}
+		if len(m.OWASP) > 0 {
+			fmt.Fprintf(stdout, "OWASP: %s\n", strings.Join(m.OWASP, ", "))
+		}
 		if u := m.Help(); u != "" {
 			fmt.Fprintf(stdout, "Docs: %s\n", u)
 		}

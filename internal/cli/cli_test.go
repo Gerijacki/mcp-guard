@@ -120,7 +120,7 @@ func TestRulesAndVersion(t *testing.T) {
 		t.Errorf("rules list:\n%s", out)
 	}
 	code, out, _ = run("rules", "explain", "mcpg003")
-	if code != ExitOK || !strings.Contains(out, "hardcoded-secret") || !strings.Contains(out, "How to fix") {
+	if code != ExitOK || !strings.Contains(out, "hardcoded-secret") || !strings.Contains(out, "How to fix") || !strings.Contains(out, "OWASP: MCP01:2025") {
 		t.Errorf("rules explain:\n%s", out)
 	}
 	if code, _, _ := run("rules", "explain", "NOPE"); code != ExitError {

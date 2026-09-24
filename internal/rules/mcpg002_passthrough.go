@@ -34,7 +34,8 @@ func (passthroughRule) Meta() Meta {
 		Remediation: "Treat fetched data as untrusted: wrap it in clear delimiters that tell the model it is data " +
 			"(e.g. <untrusted-content>…</untrusted-content>), strip HTML/scripts and invisible characters, cap its " +
 			"length, and consider running a prompt-injection classifier. Declare openWorldHint: true on the tool.",
-		CWE: []string{"CWE-74", "CWE-1426"},
+		CWE:   []string{"CWE-74", "CWE-1426"},
+		OWASP: []string{"MCP06:2025", "LLM01:2025", "ASI01:2026"},
 	}
 }
 

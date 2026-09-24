@@ -1,6 +1,6 @@
 # MCPG001: unrestricted-file-access
 
-**Default severity:** high (writes/deletes), medium (reads) · **CWE:** [CWE-22](https://cwe.mitre.org/data/definitions/22.html), [CWE-73](https://cwe.mitre.org/data/definitions/73.html)
+**Default severity:** high (writes/deletes), medium (reads) · **CWE:** [CWE-22](https://cwe.mitre.org/data/definitions/22.html), [CWE-73](https://cwe.mitre.org/data/definitions/73.html) · **OWASP:** [MCP02, LLM06, ASI02](../owasp.md)
 
 A tool passes a model-controlled path straight to a filesystem API. The LLM (or a prompt injection it has read) chooses the value, so it can use absolute paths or `../` to read, overwrite or delete any file the server can reach: SSH keys, cloud credentials, other MCP client configs, source code.
 

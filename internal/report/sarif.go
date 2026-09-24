@@ -124,6 +124,9 @@ func writeSARIF(w io.Writer, res *scanner.Result, opts Options) error {
 		for _, cwe := range m.CWE {
 			tags = append(tags, "external/cwe/"+strings.ToLower(cwe))
 		}
+		for _, id := range m.OWASP {
+			tags = append(tags, "external/owasp/"+strings.ToLower(id))
+		}
 		full := m.Description
 		if full == "" {
 			full = m.Summary

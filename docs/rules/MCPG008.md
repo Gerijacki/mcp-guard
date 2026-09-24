@@ -1,6 +1,6 @@
 # MCPG008: exposed-network-transport
 
-**Default severity:** medium · **CWE:** [CWE-306](https://cwe.mitre.org/data/definitions/306.html), [CWE-1327](https://cwe.mitre.org/data/definitions/1327.html)
+**Default severity:** medium · **CWE:** [CWE-306](https://cwe.mitre.org/data/definitions/306.html), [CWE-1327](https://cwe.mitre.org/data/definitions/1327.html) · **OWASP:** [MCP07, ASI03](../owasp.md)
 
 The server exposes MCP over HTTP or SSE on all network interfaces (`0.0.0.0`, `::`, Go's `":8080"`, Node's `app.listen(port)` without a host), and no authentication is visible in the file. Anyone on the same network, or on the internet if the port is reachable, can list and call its tools directly, bypassing the client's confirmation prompts. Servers bound only to localhost without Origin checks are also exposed to DNS-rebinding attacks from malicious web pages.
 

@@ -1,6 +1,6 @@
 # MCPG007: tool-poisoning
 
-**Default severity:** high (hidden instructions, invisible Unicode), medium (config references, tool shadowing), low/info (one-word or missing descriptions) · **CWE:** [CWE-1427](https://cwe.mitre.org/data/definitions/1427.html), [CWE-451](https://cwe.mitre.org/data/definitions/451.html)
+**Default severity:** high (hidden instructions, invisible Unicode), medium (config references, tool shadowing), low/info (one-word or missing descriptions) · **CWE:** [CWE-1427](https://cwe.mitre.org/data/definitions/1427.html), [CWE-451](https://cwe.mitre.org/data/definitions/451.html) · **OWASP:** [MCP03, LLM01, ASI01, ASI04](../owasp.md)
 
 Tool and parameter descriptions are injected verbatim into the model's context, but most clients never show them to the user. A malicious or compromised server can therefore hide instructions in them, a technique known as **tool poisoning**:
 

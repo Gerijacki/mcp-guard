@@ -24,6 +24,9 @@ type Meta struct {
 	Description string
 	Remediation string
 	CWE         []string
+	// OWASP lists OWASP Top 10 identifiers: MCPxx:2025 (MCP Top 10), LLMxx:2025
+	// (LLM Applications) and ASIxx:2026 (Agentic Applications). See docs/owasp.md.
+	OWASP []string
 	// HelpURL overrides the default documentation link (used by custom rules).
 	HelpURL string
 }

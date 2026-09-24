@@ -4,6 +4,7 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"regexp"
 	"strconv"
 	"strings"
 	"testing"
@@ -156,9 +157,13 @@ func TestCustomRule(t *testing.T) {
 	r, err := CompileCustom(CustomSpec{
 		ID: "ACME001", Severity: "high", Scope: "tool-body", Pattern: `\brequests\.delete\s*\(`,
 		RequiresTaintedInput: true, Message: "Tool {tool} sends DELETE with {param}",
+		OWASP: []string{"ASI02:2026"},
 	})
 	if err != nil {
 		t.Fatal(err)
+	}
+	if m := r.Meta(); len(m.OWASP) != 1 || m.OWASP[0] != "ASI02:2026" {
+		t.Errorf("OWASP not carried into Meta: %+v", m.OWASP)
 	}
 	src := "from mcp.server.fastmcp import FastMCP\nmcp = FastMCP('x')\n\n@mcp.tool()\ndef rm(url: str) -> str:\n    \"\"\"Remove.\"\"\"\n    requests.delete(url)\n    requests.delete('https://fixed.example')\n    return 'ok'\n"
 	f := source.NewFile("x.py", source.Python, src)
@@ -176,6 +181,25 @@ func TestCustomRule(t *testing.T) {
 	} {
 		if _, err := CompileCustom(bad); err == nil {
 			t.Errorf("CompileCustom(%+v) should fail", bad)
+		}
+	}
+}
+
+// Every built-in rule maps to at least one entry of each OWASP list it can belong to, using
+// the official identifier format (see docs/owasp.md).
+func TestBuiltinOWASPMapping(t *testing.T) {
+	idRe := regexp.MustCompile(`^(?:(?:MCP|LLM)(?:0[1-9]|10):2025|ASI(?:0[1-9]|10):2026)$`)
+	for _, r := range Builtin() {
+		m := r.Meta()
+		var mcp bool
+		for _, id := range m.OWASP {
+			if !idRe.MatchString(id) {
+				t.Errorf("%s: malformed OWASP id %q", m.ID, id)
+			}
+			mcp = mcp || strings.HasPrefix(id, "MCP")
+		}
+		if !mcp {
+			t.Errorf("%s: missing an OWASP MCP Top 10 id", m.ID)
 		}
 	}
 }
