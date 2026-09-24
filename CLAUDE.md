@@ -40,7 +40,9 @@ go run ./cmd/mcp-guard scan . --fail-on none     # dogfood: the repo itself (tes
 
 ## Validation against real servers
 
-Before changing heuristics, shallow-clone a few real MCP repos into a temporary directory (e.g. `modelcontextprotocol/servers`, `modelcontextprotocol/python-sdk`, `mark3labs/mcp-go`, `github/github-mcp-server`), run `mcp-guard scan <dir> --format json --fail-on none`, and review every finding. At the time of writing these four produce 9 findings in total, all plausible true positives. Keep it that way.
+`go run ./tools/accuracy` scans the public MCP repositories pinned in `benchmark/corpus.yaml` and fails if extracted tools or findings change (CI job `accuracy`). When a heuristic change moves the numbers, inspect every new or missing finding. Only then refresh the expectations with `-update`, and justify the change in the commit message. Today the corpus yields 9 findings, all plausible true positives: keep precision that high. `.github/workflows/canary.yml` runs `-latest` weekly against default branches to detect SDK API drift, and it tests the published Action.
+
+Robustness: `FuzzAnalyze` (CI job `fuzz`) and `TestPathologicalInputs` (skipped with `-short`; CI runs it without `-race`) guard the lexer/extractors against panics and super-linear blowups.
 
 ## CI, release and distribution
 
@@ -49,7 +51,7 @@ Before changing heuristics, shallow-clone a few real MCP repos into a temporary 
   - golangci-lint (`.golangci.yml`), govulncheck, `goreleaser check`
   - **dogfood**: the Action from source (`uses: ./`, `version: source`). The repo must scan clean, and `examples/vulnerable-server` must fail with all 8 rules present in its SARIF.
 - `codeql.yml`: CodeQL for Go. `dependabot.yml`: weekly updates for gomod and actions.
-- **Release:** push a `vX.Y.Z` tag. `release.yml` runs GoReleaser (`.goreleaser.yaml`):
+- **Release:** push a `vX.Y.Z` tag. `release.yml` runs GoReleaser (`.goreleaser.yaml`), then attests build provenance for the archives, checksums and image (`actions/attest-build-provenance`). SPDX SBOMs come from syft. GoReleaser produces:
   - binaries and archives `mcp-guard_<os>_<arch>` (names must stay stable: `action.yml`, `install.sh` and `install.ps1` depend on them)
   - `checksums.txt`
   - multi-arch GHCR image `ghcr.io/gerijacki/mcp-guard` (`dockers_v2` + `Dockerfile`)

@@ -13,6 +13,8 @@ jobs:
     permissions:
       contents: write # create the release, move the major tag
       packages: write # push the image to GHCR
+      id-token: write # sign build provenance (Sigstore)
+      attestations: write
     steps:
       - uses: actions/checkout@v7
         with:
@@ -21,6 +23,7 @@ jobs:
         with:
           go-version: stable
       - run: go test ./...
+      - uses: anchore/sbom-action/download-syft@v0
       - uses: docker/setup-qemu-action@v4
       - uses: docker/setup-buildx-action@v4
       - uses: docker/login-action@v4
@@ -35,6 +38,22 @@ jobs:
           args: release --clean
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: Attest build provenance (archives, SBOMs, checksums)
+        uses: actions/attest-build-provenance@v2
+        with:
+          subject-checksums: ./dist/checksums.txt
+      - name: Resolve the image digest
+        id: image
+        run: |
+          ref="ghcr.io/gerijacki/mcp-guard:${GITHUB_REF_NAME#v}"
+          digest="$(docker buildx imagetools inspect "$ref" --format '{{json .Manifest}}' | jq -r .digest)"
+          echo "digest=$digest" >> "$GITHUB_OUTPUT"
+      - name: Attest build provenance (container image)
+        uses: actions/attest-build-provenance@v2
+        with:
+          subject-name: ghcr.io/gerijacki/mcp-guard
+          subject-digest: ${{ steps.image.outputs.digest }}
+          push-to-registry: true
       - name: Move the major version tag (e.g. v0) for the GitHub Action
         if: ${{ !contains(github.ref_name, '-') }}
         run: |
@@ -52,8 +71,16 @@ jobs:
     permissions:
       contents: read
       packages: read
+      attestations: read
     steps:
       - uses: actions/checkout@v7
+      - name: Verify provenance of a release archive
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release download "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" --pattern 'mcp-guard_linux_amd64.tar.gz*'
+          test -s mcp-guard_linux_amd64.tar.gz.sbom.json
+          gh attestation verify mcp-guard_linux_amd64.tar.gz --repo "$GITHUB_REPOSITORY"
       - name: install.sh
         env:
           MCP_GUARD_VERSION: ${{ github.ref_name }}
@@ -72,8 +99,11 @@ jobs:
           password: ${{ secrets.GITHUB_TOKEN }}
       - name: Docker image
         if: runner.os == 'Linux'
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
           tag="${GITHUB_REF_NAME#v}"
+          gh attestation verify "oci://ghcr.io/gerijacki/mcp-guard:$tag" --repo "$GITHUB_REPOSITORY"
           docker run --rm "ghcr.io/gerijacki/mcp-guard:$tag" version
           set +e
           docker run --rm -v "$PWD/examples/vulnerable-server:/src" "ghcr.io/gerijacki/mcp-guard:$tag"

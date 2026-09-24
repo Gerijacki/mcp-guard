@@ -11,6 +11,10 @@ Report it privately through [GitHub Security Advisories](https://github.com/Geri
 - In scope: the `mcp-guard` binary, its GitHub Action and release artifacts.
 - Out of scope: vulnerabilities in the MCP servers that mcp-guard scans (report those to their maintainers) and missed detections (open a regular issue, since those are feature requests).
 
+## Release integrity
+
+Release archives, checksums and the container image have signed build provenance (verify with `gh attestation verify`) and SPDX SBOMs. See [docs/installation.md](docs/installation.md#verifying-releases). The scanner treats scanned repositories as untrusted input: each file has an analysis time budget, report snippets escape control and invisible characters, and the lexer, extractors and rules are fuzzed in CI.
+
 ## Supported versions
 
 Only the latest release receives security fixes.

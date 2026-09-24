@@ -74,7 +74,7 @@ curl -sSfL https://raw.githubusercontent.com/Gerijacki/mcp-guard/main/install.sh
 or with Docker:
 
 ```sh
-docker run --rm -v "$PWD:/src" ghcr.io/gerijacki/mcp-guard:0.1.0 scan . --fail-on high
+docker run --rm -v "$PWD:/src" ghcr.io/gerijacki/mcp-guard:0.1.1 scan . --fail-on high
 ```
 
 ## pre-commit

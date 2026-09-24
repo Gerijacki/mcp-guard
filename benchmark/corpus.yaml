@@ -1,0 +1,35 @@
+# Real-world accuracy benchmark. Run with: go run ./tools/accuracy
+#
+# Each entry pins a public MCP repository at a commit and records what mcp-guard is
+# expected to find there with default settings (tests skipped, min severity low).
+# A change in any number fails CI: if the change is an intended improvement, review
+# the new findings and refresh the expectations with: go run ./tools/accuracy -update
+repos:
+  - name: modelcontextprotocol/servers
+    commit: f46d9578190b476b3501923ea8977d899e8db2cb
+    expect:
+      tools: 31
+      configs: 1
+      findings:
+        MCPG006: 3
+        MCPG008: 2
+  - name: modelcontextprotocol/python-sdk
+    commit: f1b6589088534632fef92238ee9750951e3c0185
+    expect:
+      tools: 277
+      configs: 1
+      findings:
+        MCPG006: 1
+  - name: mark3labs/mcp-go
+    commit: d74db509452d46e0521fe43b9e3dfa77350e8b0a
+    expect:
+      tools: 32
+      configs: 0
+      findings:
+        MCPG008: 3
+  - name: github/github-mcp-server
+    commit: 85598ba6e1256f7ebf4867b95d63b833c4549264
+    expect:
+      tools: 119
+      configs: 1
+      findings: {}

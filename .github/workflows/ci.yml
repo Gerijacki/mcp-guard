@@ -37,7 +37,8 @@ jobs:
         shell: bash
         run: |
           if [ "$RUNNER_OS" = "Linux" ]; then
-            go test -race -coverprofile=coverage.out ./...
+            go test -race -short -coverprofile=coverage.out ./...
+            go test -run 'TestPathologicalInputs' ./internal/rules
             echo "### Coverage: $(go tool cover -func=coverage.out | tail -n 1 | awk '{print $3}')" >> "$GITHUB_STEP_SUMMARY"
           else
             go test ./...
@@ -53,6 +54,32 @@ jobs:
       - uses: golangci/golangci-lint-action@v9
         with:
           version: latest
+
+  fuzz:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
+        with:
+          go-version: stable
+      - name: Fuzz lexer, extractors and rules (60s)
+        run: go test ./internal/rules -run '^$' -fuzz FuzzAnalyze -fuzztime 60s
+      - name: Keep the failing input
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: fuzz-crashers
+          path: internal/rules/testdata/fuzz
+
+  accuracy:
+    name: accuracy (real MCP repositories)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
+        with:
+          go-version: stable
+      - run: go run ./tools/accuracy
 
   govulncheck:
     runs-on: ubuntu-latest

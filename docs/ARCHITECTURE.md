@@ -79,7 +79,18 @@ The planned upgrade path is a proper AST (tree-sitter via a pure-Go runtime, or 
 1. Create `internal/rules/mcpgNNN_<name>.go` implementing `Rule` (`Meta()` + `Check()`), and register it in `Builtin()` in `rules.go`.
 2. Add fixtures under `testdata/rules/MCPGNNN/{vulnerable,safe}/`, ideally one per language, and pin the expected counts in `wantCounts` in `rules_test.go`.
 3. Add `docs/rules/MCPGNNN.md` and a row in the README rules table.
-4. Run the scanner against a few real MCP server repositories and check for false positives before merging.
+4. Run `go run ./tools/accuracy` (the pinned real-world corpus in `benchmark/corpus.yaml`) and review any change in findings before updating the expectations with `-update`.
+
+## Quality gates
+
+| Gate | Where | Catches |
+|---|---|---|
+| Fixture tests | `internal/rules/rules_test.go` | exact finding counts per vulnerable/safe fixture |
+| Accuracy benchmark | `tools/accuracy`, `benchmark/corpus.yaml`, CI job `accuracy` | new false positives or lost detections on real MCP repositories at pinned commits |
+| SDK drift canary | `.github/workflows/canary.yml` (weekly) | SDKs changing their registration API (extracted tools drop on default branches), a broken published Action |
+| Fuzzing | `FuzzAnalyze`, CI job `fuzz` | panics and invalid positions on arbitrary input |
+| Pathological inputs | `TestPathologicalInputs` | super-linear behavior on 1 MiB adversarial files |
+| Per-file time budget | `scanner.Options.FileTimeout` | anything the above missed: the file is skipped with a warning |
 
 ## Output stability
 

@@ -1,0 +1,62 @@
+name: Canary
+
+# Weekly early warning for problems outside this repository:
+# - MCP SDKs changing how tools are registered (tool extraction drops on their default branches)
+# - the published Action (Gerijacki/mcp-guard@v0) or release assets breaking for users
+# A failure opens (or updates) an issue labeled "canary".
+on:
+  schedule:
+    - cron: "17 6 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  sdk-drift:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
+        with:
+          go-version: stable
+      - run: go run ./tools/accuracy -latest
+
+  published-action:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - name: Run the released Action on the vulnerable example
+        id: scan
+        continue-on-error: true
+        uses: Gerijacki/mcp-guard@v0
+        with:
+          path: examples/vulnerable-server
+          upload-sarif: "false"
+      - name: The released Action must report findings
+        env:
+          OUTCOME: ${{ steps.scan.outcome }}
+        run: |
+          test "$OUTCOME" = failure || { echo "expected findings (step failure), got $OUTCOME"; exit 1; }
+          test "$(grep -c '"ruleId"' mcp-guard.sarif)" -ge 8
+
+  report:
+    needs: [sdk-drift, published-action]
+    if: failure()
+    runs-on: ubuntu-latest
+    permissions:
+      issues: write
+    steps:
+      - env:
+          GH_TOKEN: ${{ github.token }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          title="Canary failed: SDK drift or published release problem"
+          body="The weekly canary failed: $RUN_URL"
+          existing="$(gh issue list --repo "$GITHUB_REPOSITORY" --label canary --state open --json number --jq '.[0].number')"
+          if [ -n "$existing" ]; then
+            gh issue comment "$existing" --repo "$GITHUB_REPOSITORY" --body "$body"
+          else
+            gh label create canary --repo "$GITHUB_REPOSITORY" --color B60205 --description "Automated canary failures" 2>/dev/null || true
+            gh issue create --repo "$GITHUB_REPOSITORY" --title "$title" --label canary --body "$body"
+          fi

@@ -30,6 +30,10 @@ archives:
 checksum:
   name_template: checksums.txt
 
+# SPDX SBOM for every archive (mcp-guard_<os>_<arch>.<ext>.sbom.json), generated with syft.
+sboms:
+  - artifacts: archive
+
 dockers_v2:
   - images:
       - ghcr.io/gerijacki/mcp-guard
@@ -68,4 +72,15 @@ release:
     docker run --rm -v "$PWD:/src" ghcr.io/gerijacki/mcp-guard:{{ .Version }}
     ```
 
-    GitHub Action: `uses: Gerijacki/mcp-guard@v{{ .Major }}`. Verify downloads with `checksums.txt`.
+    GitHub Action: `uses: Gerijacki/mcp-guard@v{{ .Major }}`.
+
+    ## Verify
+
+    Archives, checksums and the container image carry signed build provenance (SLSA, Sigstore):
+
+    ```sh
+    gh attestation verify mcp-guard_linux_amd64.tar.gz --repo Gerijacki/mcp-guard
+    gh attestation verify oci://ghcr.io/gerijacki/mcp-guard:{{ .Version }} --repo Gerijacki/mcp-guard
+    ```
+
+    Each archive also has an SPDX SBOM (`*.sbom.json`).

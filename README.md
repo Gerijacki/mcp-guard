@@ -222,7 +222,7 @@ jobs:
 ```yaml
 repos:
   - repo: https://github.com/Gerijacki/mcp-guard
-    rev: v0.1.0
+    rev: v0.1.1
     hooks:
       - id: mcp-guard            # or mcp-guard-docker
 ```

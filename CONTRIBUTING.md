@@ -15,8 +15,10 @@ These are the most valuable issues. Please include:
 Requirements: Go 1.23 or newer. No other tools are needed.
 
 ```sh
-go test ./...                              # unit + fixture tests
+go test ./...                              # unit + fixture tests (add -short to skip slow ones)
 go vet ./...
+go run ./tools/accuracy                    # real-world accuracy benchmark (clones repos)
+go test ./internal/rules -run '^$' -fuzz FuzzAnalyze -fuzztime 60s   # fuzzing
 go run ./cmd/mcp-guard scan examples/vulnerable-server
 ```
 
@@ -28,7 +30,7 @@ Project layout and design are described in [docs/ARCHITECTURE.md](docs/ARCHITECT
 2. Add `vulnerable` **and** `safe` fixtures under `testdata/rules/<ID>/`, covering Python, TypeScript and Go where the rule applies. Safe fixtures should be realistic near-misses (the correct way to do the same thing), not unrelated code.
 3. Pin the expected finding count for each vulnerable fixture in `internal/rules/rules_test.go`.
 4. Document it in `docs/rules/<ID>.md` and the README table.
-5. Scan a few real MCP server repositories and mention the false-positive rate in the pull request.
+5. Run the real-world accuracy benchmark: `go run ./tools/accuracy`. It scans public MCP repositories pinned in `benchmark/corpus.yaml` and fails when the number of extracted tools or findings changes. If the change is an intended improvement, review every new or missing finding, then run `go run ./tools/accuracy -update` and explain the difference in the pull request. New corpus entries (popular MCP servers) are welcome.
 
 Never commit real credentials, not even revoked ones. Tests for known secret formats build tokens at runtime (see `TestKnownSecretFormats`).
 

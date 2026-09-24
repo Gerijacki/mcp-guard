@@ -23,7 +23,7 @@ Check the installation with `mcp-guard version`.
 curl -sSfL https://raw.githubusercontent.com/Gerijacki/mcp-guard/main/install.sh | sh
 
 # a specific version into a specific directory
-curl -sSfL https://raw.githubusercontent.com/Gerijacki/mcp-guard/main/install.sh | MCP_GUARD_VERSION=v0.1.0 BIN_DIR="$HOME/bin" sh
+curl -sSfL https://raw.githubusercontent.com/Gerijacki/mcp-guard/main/install.sh | MCP_GUARD_VERSION=v0.1.1 BIN_DIR="$HOME/bin" sh
 ```
 
 If you prefer not to pipe to a shell, download `install.sh`, read it, then run it.
@@ -37,7 +37,7 @@ Multi-arch images (`linux/amd64`, `linux/arm64`) are published to GitHub Contain
 | Tag | Meaning |
 |---|---|
 | `latest` | newest release |
-| `0.1.0` | exact version (recommended for CI) |
+| `0.1.1` | exact version (recommended for CI) |
 | `v0` | newest release of the major version |
 
 ```sh
@@ -62,6 +62,17 @@ sha256sum --check --ignore-missing checksums.txt
 tar -xzf mcp-guard_linux_amd64.tar.gz mcp-guard && sudo mv mcp-guard /usr/local/bin/
 ```
 
+## Verifying releases
+
+Every release archive, `checksums.txt` and the container image carry **signed build provenance** (SLSA provenance, signed with Sigstore through GitHub artifact attestations), so you can check that a binary was built by this repository's release workflow from a specific commit:
+
+```sh
+gh attestation verify mcp-guard_linux_amd64.tar.gz --repo Gerijacki/mcp-guard
+gh attestation verify oci://ghcr.io/gerijacki/mcp-guard:0.1.1 --repo Gerijacki/mcp-guard
+```
+
+Each archive also ships an SPDX **SBOM** (`mcp-guard_<os>_<arch>.<ext>.sbom.json`). The only third-party Go module is `gopkg.in/yaml.v3`.
+
 ## pre-commit
 
 With the [pre-commit](https://pre-commit.com) framework, add this to `.pre-commit-config.yaml`:
@@ -69,7 +80,7 @@ With the [pre-commit](https://pre-commit.com) framework, add this to `.pre-commi
 ```yaml
 repos:
   - repo: https://github.com/Gerijacki/mcp-guard
-    rev: v0.1.0
+    rev: v0.1.1
     hooks:
       - id: mcp-guard          # builds from source (needs Go)
       # - id: mcp-guard-docker # or: runs the container image (needs Docker)
