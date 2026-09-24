@@ -24,6 +24,16 @@ var sevStyle = map[finding.Severity]string{
 	finding.Info:     "\x1b[2m",
 }
 
+// summaryStyle uses foreground colors only: inline background badges are hard to read
+// in many terminal themes.
+var summaryStyle = map[finding.Severity]string{
+	finding.Critical: "[1;91m",
+	finding.High:     "[1;31m",
+	finding.Medium:   "[1;33m",
+	finding.Low:      "[1;36m",
+	finding.Info:     "[2m",
+}
+
 func writeText(w io.Writer, res *scanner.Result, opts Options) error {
 	bw := bufio.NewWriter(w)
 	paint := func(style, s string) string {
@@ -65,7 +75,7 @@ func writeText(w io.Writer, res *scanner.Result, opts Options) error {
 		var parts []string
 		for s := finding.Critical; s >= finding.Info; s-- {
 			if n := counts[s.String()]; n > 0 {
-				parts = append(parts, paint(sevStyle[s], fmt.Sprintf("%d %s", n, s)))
+				parts = append(parts, paint(summaryStyle[s], fmt.Sprintf("%d %s", n, s)))
 			}
 		}
 		fmt.Fprintf(bw, "%s %s\n", paint(bold, "Found "+plural(len(res.Findings), "issue")+":"), strings.Join(parts, ", "))
