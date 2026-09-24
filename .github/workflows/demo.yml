@@ -1,0 +1,35 @@
+name: Demo
+
+# Renders demo/demo.tape with VHS into docs/demo.gif and commits it.
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths: ["demo/**"]
+
+permissions:
+  contents: write
+
+jobs:
+  render:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-go@v5
+        with:
+          go-version: stable
+      - name: Build mcp-guard
+        run: |
+          mkdir -p "$HOME/bin"
+          version="$(git describe --tags --always 2>/dev/null || echo dev)"
+          go build -ldflags "-X github.com/Gerijacki/mcp-guard/internal/cli.version=$version" -o "$HOME/bin/mcp-guard" ./cmd/mcp-guard
+          echo "$HOME/bin" >> "$GITHUB_PATH"
+      - uses: charmbracelet/vhs-action@v2
+        with:
+          path: demo/demo.tape
+      - uses: stefanzweifel/git-auto-commit-action@v5
+        with:
+          commit_message: "docs: update demo GIF"
+          file_pattern: docs/demo.gif

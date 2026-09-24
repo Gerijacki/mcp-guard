@@ -1,0 +1,117 @@
+name: mcp-guard
+description: Security linter for MCP (Model Context Protocol) servers. Finds command injection, path traversal, secrets, tool poisoning and more.
+author: mcp-guard contributors
+branding:
+  icon: shield
+  color: blue
+
+inputs:
+  path:
+    description: File or directory to scan.
+    default: "."
+  fail-on:
+    description: Fail the step when a finding has at least this severity (critical, high, medium, low, info, none).
+    default: high
+  min-severity:
+    description: Hide findings below this severity.
+    default: low
+  upload-sarif:
+    description: "Upload results to GitHub code scanning (requires the security-events: write permission)."
+    default: "true"
+  sarif-file:
+    description: Where to write the SARIF report.
+    default: mcp-guard.sarif
+  args:
+    description: Extra arguments for `mcp-guard scan` (e.g. "--disable MCPG006 --include-tests").
+    default: ""
+  version:
+    description: mcp-guard release to use (e.g. v0.1.0), "latest", or "source" to build the action's own checkout (requires Go on the runner).
+    default: latest
+
+outputs:
+  sarif-file:
+    description: Path of the SARIF report.
+    value: ${{ inputs.sarif-file }}
+
+runs:
+  using: composite
+  steps:
+    - name: Install mcp-guard
+      shell: bash
+      env:
+        VERSION: ${{ inputs.version }}
+        ACTION_PATH: ${{ github.action_path }}
+      run: |
+        set -euo pipefail
+        dir="${RUNNER_TEMP}/mcp-guard"
+        mkdir -p "$dir"
+        if [ "$VERSION" = source ]; then
+          (cd "$ACTION_PATH" && go build -o "$dir/" ./cmd/mcp-guard)
+          echo "$dir" >> "$GITHUB_PATH"
+          exit 0
+        fi
+        case "${RUNNER_OS}" in
+          Linux) os=linux ;;
+          macOS) os=darwin ;;
+          Windows) os=windows ;;
+          *) echo "unsupported runner OS: ${RUNNER_OS}"; exit 1 ;;
+        esac
+        case "${RUNNER_ARCH}" in
+          X64) arch=amd64 ;;
+          ARM64) arch=arm64 ;;
+          *) echo "unsupported runner arch: ${RUNNER_ARCH}"; exit 1 ;;
+        esac
+        ext=tar.gz; [ "$os" = windows ] && ext=zip
+        asset="mcp-guard_${os}_${arch}.${ext}"
+        if [ "$VERSION" = latest ]; then
+          url="https://github.com/Gerijacki/mcp-guard/releases/latest/download/${asset}"
+        else
+          url="https://github.com/Gerijacki/mcp-guard/releases/download/${VERSION}/${asset}"
+        fi
+        curl -fsSL "$url" -o "$dir/$asset"
+        if [ "$ext" = zip ]; then unzip -q -o "$dir/$asset" -d "$dir"; else tar -xzf "$dir/$asset" -C "$dir"; fi
+        echo "$dir" >> "$GITHUB_PATH"
+
+    - name: Scan (SARIF)
+      shell: bash
+      env:
+        SCAN_PATH: ${{ inputs.path }}
+        MIN_SEVERITY: ${{ inputs.min-severity }}
+        SARIF_FILE: ${{ inputs.sarif-file }}
+        EXTRA_ARGS: ${{ inputs.args }}
+      run: |
+        # shellcheck disable=SC2086 # EXTRA_ARGS is intentionally word-split
+        mcp-guard scan "$SCAN_PATH" --format sarif --output "$SARIF_FILE" \
+          --min-severity "$MIN_SEVERITY" --fail-on none $EXTRA_ARGS
+
+    - name: Upload SARIF
+      if: ${{ inputs.upload-sarif == 'true' }}
+      uses: github/codeql-action/upload-sarif@v3
+      with:
+        sarif_file: ${{ inputs.sarif-file }}
+        category: mcp-guard
+
+    - name: Scan (report)
+      shell: bash
+      env:
+        SCAN_PATH: ${{ inputs.path }}
+        MIN_SEVERITY: ${{ inputs.min-severity }}
+        FAIL_ON: ${{ inputs.fail-on }}
+        EXTRA_ARGS: ${{ inputs.args }}
+      run: |
+        set +e
+        report="${RUNNER_TEMP}/mcp-guard.txt"
+        # shellcheck disable=SC2086
+        mcp-guard scan "$SCAN_PATH" --no-color --min-severity "$MIN_SEVERITY" --fail-on "$FAIL_ON" $EXTRA_ARGS | tee "$report"
+        code=${PIPESTATUS[0]}
+        {
+          echo "### mcp-guard: $(tail -n 1 "$report")"
+          echo
+          echo '<details><summary>Full report</summary>'
+          echo
+          echo '```'
+          head -n 400 "$report"
+          echo '```'
+          echo '</details>'
+        } >> "$GITHUB_STEP_SUMMARY"
+        exit "$code"

@@ -1,0 +1,48 @@
+name: False positive / missed detection
+description: mcp-guard reported something that is safe, or missed something that is not.
+labels: ["accuracy"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Accuracy reports are the most valuable issues for this project. Please **do not paste real secrets**; replace them with fake values of the same shape.
+  - type: dropdown
+    id: kind
+    attributes:
+      label: Kind
+      options:
+        - False positive (reported, but safe)
+        - False negative (vulnerable, but not reported)
+    validations:
+      required: true
+  - type: input
+    id: rule
+    attributes:
+      label: Rule ID
+      placeholder: MCPG004
+  - type: textarea
+    id: code
+    attributes:
+      label: Minimal code snippet
+      description: The smallest tool definition that reproduces the problem, or a link to a public repository and line.
+      render: text
+    validations:
+      required: true
+  - type: textarea
+    id: output
+    attributes:
+      label: mcp-guard output
+      render: text
+  - type: textarea
+    id: why
+    attributes:
+      label: Why is it wrong?
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: mcp-guard version
+      placeholder: output of `mcp-guard version`
+    validations:
+      required: true

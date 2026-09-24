@@ -1,0 +1,16 @@
+{
+  "mcpServers": {
+    "search": {
+      "command": "npx",
+      "args": ["-y", "some-search-mcp"],
+      "env": {
+        "SEARCH_API_KEY": "Zq8vN2kL5xW9pR3tY7uB1mC4"
+      }
+    },
+    "db": {
+      "command": "uvx",
+      "args": ["some-db-mcp"],
+      "env": { "DB_DSN": "Xr7Kp2Qm9Vt4Lw8Nz3Hb6Jd1" }
+    }
+  }
+}

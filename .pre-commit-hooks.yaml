@@ -1,0 +1,16 @@
+# Hooks for https://pre-commit.com
+- id: mcp-guard
+  name: mcp-guard
+  description: Security linter for MCP (Model Context Protocol) servers.
+  entry: mcp-guard scan
+  language: golang
+  pass_filenames: false
+  always_run: true
+
+- id: mcp-guard-docker
+  name: mcp-guard (docker)
+  description: Security linter for MCP servers, run from the published container image.
+  entry: ghcr.io/gerijacki/mcp-guard:latest scan
+  language: docker_image
+  pass_filenames: false
+  always_run: true

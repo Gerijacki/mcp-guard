@@ -1,0 +1,15 @@
+{
+  "mcpServers": {
+    "team-assistant": {
+      "type": "http",
+      "url": "http://localhost:8000/mcp",
+      "headers": {
+        "Authorization": "Bearer Tq7Wz2Lk9Pm4Xv8Rn3Hb6Jc1Yd5"
+      }
+    },
+    "postgres": {
+      "command": "npx",
+      "args": ["-y", "some-postgres-mcp", "postgresql://app:Pr0dPassw0rd2026@db.internal:5432/app"]
+    }
+  }
+}

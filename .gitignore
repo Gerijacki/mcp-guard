@@ -1,0 +1,14 @@
+# Local planning notes (not part of the public repo)
+mcp-security-scanner-plan.md
+
+# Build output
+/mcp-guard
+/mcp-guard.exe
+/dist/
+*.sarif
+
+# Editors / OS
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db

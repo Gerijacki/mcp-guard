@@ -1,0 +1,113 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    name: test (${{ matrix.os }}, go ${{ matrix.go }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+        go: [stable]
+        include:
+          - os: ubuntu-latest
+            go: "1.23" # minimum supported version (go.mod)
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: ${{ matrix.go }}
+      - name: gofmt
+        if: runner.os == 'Linux' && matrix.go == 'stable'
+        run: test -z "$(gofmt -l .)" || (gofmt -l . && exit 1)
+      - run: go vet ./...
+      - name: go test
+        shell: bash
+        run: |
+          if [ "$RUNNER_OS" = "Linux" ]; then
+            go test -race -coverprofile=coverage.out ./...
+            echo "### Coverage: $(go tool cover -func=coverage.out | tail -n 1 | awk '{print $3}')" >> "$GITHUB_STEP_SUMMARY"
+          else
+            go test ./...
+          fi
+
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: stable
+      - uses: golangci/golangci-lint-action@v8
+        with:
+          version: latest
+
+  govulncheck:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: stable
+      - run: go run golang.org/x/vuln/cmd/govulncheck@latest ./...
+
+  goreleaser-check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: goreleaser/goreleaser-action@v6
+        with:
+          distribution: goreleaser
+          version: "~> v2"
+          args: check
+
+  dogfood:
+    name: dogfood (GitHub Action from source)
+    runs-on: ubuntu-latest
+    needs: test
+    permissions:
+      contents: read
+      security-events: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: stable
+
+      - name: Scan this repository (must be clean)
+        uses: ./
+        with:
+          version: source
+          upload-sarif: ${{ github.event_name == 'push' }}
+
+      - name: Scan the vulnerable example (must fail)
+        id: example
+        continue-on-error: true
+        uses: ./
+        with:
+          version: source
+          path: examples/vulnerable-server
+          sarif-file: example.sarif
+          upload-sarif: "false"
+
+      - name: Check that every rule fired
+        env:
+          OUTCOME: ${{ steps.example.outcome }}
+        run: |
+          test "$OUTCOME" = failure || { echo "expected the example scan to fail, got $OUTCOME"; exit 1; }
+          for id in MCPG001 MCPG002 MCPG003 MCPG004 MCPG005 MCPG006 MCPG007 MCPG008; do
+            grep -q "\"ruleId\": \"$id\"" example.sarif || { echo "missing $id in SARIF"; exit 1; }
+          done
+          echo "all 8 rules detected"

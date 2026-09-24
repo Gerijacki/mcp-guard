@@ -1,0 +1,4 @@
+# mcp-guard configuration for this repository (dogfooding).
+# examples/ contains a deliberately vulnerable server; it is scanned separately in CI.
+ignore:
+  - examples/

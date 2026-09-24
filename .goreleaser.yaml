@@ -1,0 +1,71 @@
+version: 2
+
+project_name: mcp-guard
+
+before:
+  hooks:
+    - go mod tidy
+
+builds:
+  - main: ./cmd/mcp-guard
+    binary: mcp-guard
+    env:
+      - CGO_ENABLED=0
+    goos: [linux, darwin, windows]
+    goarch: [amd64, arm64]
+    flags: [-trimpath]
+    ldflags:
+      - -s -w -X github.com/Gerijacki/mcp-guard/internal/cli.version={{ .Version }}
+
+archives:
+  # Stable, version-less names so the GitHub Action and install scripts can download
+  # releases/latest/download/mcp-guard_<os>_<arch>.<ext>
+  - name_template: "{{ .ProjectName }}_{{ .Os }}_{{ .Arch }}"
+    formats: [tar.gz]
+    format_overrides:
+      - goos: windows
+        formats: [zip]
+    files: [LICENSE, README.md]
+
+checksum:
+  name_template: checksums.txt
+
+dockers_v2:
+  - images:
+      - ghcr.io/gerijacki/mcp-guard
+    tags:
+      - "{{ .Version }}"
+      - "v{{ .Major }}"
+      - latest
+    platforms:
+      - linux/amd64
+      - linux/arm64
+    labels:
+      org.opencontainers.image.title: mcp-guard
+      org.opencontainers.image.description: Security linter for MCP (Model Context Protocol) servers
+      org.opencontainers.image.source: https://github.com/Gerijacki/mcp-guard
+      org.opencontainers.image.licenses: MIT
+      org.opencontainers.image.version: "{{ .Version }}"
+      org.opencontainers.image.revision: "{{ .FullCommit }}"
+
+changelog:
+  sort: asc
+  filters:
+    exclude: ["^docs:", "^test:", "^chore:", "^ci:"]
+
+release:
+  footer: |
+    ## Install
+
+    ```sh
+    # Linux / macOS
+    curl -sSfL https://raw.githubusercontent.com/Gerijacki/mcp-guard/main/install.sh | sh
+
+    # Go
+    go install github.com/Gerijacki/mcp-guard/cmd/mcp-guard@v{{ .Version }}
+
+    # Docker
+    docker run --rm -v "$PWD:/src" ghcr.io/gerijacki/mcp-guard:{{ .Version }}
+    ```
+
+    GitHub Action: `uses: Gerijacki/mcp-guard@v{{ .Major }}`. Verify downloads with `checksums.txt`.

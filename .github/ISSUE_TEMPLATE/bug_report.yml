@@ -1,0 +1,35 @@
+name: Bug report
+description: mcp-guard crashed, hung, or behaved incorrectly (not a detection accuracy issue).
+labels: ["bug"]
+body:
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened?
+    validations:
+      required: true
+  - type: textarea
+    id: repro
+    attributes:
+      label: Steps to reproduce
+      description: Command line, config file and a minimal input.
+      render: text
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: mcp-guard version
+      placeholder: output of `mcp-guard version`
+    validations:
+      required: true
+  - type: dropdown
+    id: install
+    attributes:
+      label: Installed via
+      options: [release binary, install script, go install, Docker, GitHub Action, pre-commit, other]
+  - type: input
+    id: os
+    attributes:
+      label: OS / architecture
+      placeholder: Ubuntu 24.04 amd64

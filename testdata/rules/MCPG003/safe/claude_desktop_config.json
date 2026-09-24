@@ -1,0 +1,14 @@
+{
+  "mcpServers": {
+    "github": {
+      "command": "docker",
+      "args": ["run", "-i", "--rm", "-e", "GITHUB_PERSONAL_ACCESS_TOKEN", "ghcr.io/github/github-mcp-server"],
+      "env": { "GITHUB_PERSONAL_ACCESS_TOKEN": "${input:github_token}" }
+    },
+    "search": {
+      "command": "npx",
+      "args": ["-y", "some-search-mcp"],
+      "env": { "SEARCH_API_KEY": "<your-api-key>", "LOG_LEVEL": "debug" }
+    }
+  }
+}

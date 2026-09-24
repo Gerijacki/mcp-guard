@@ -1,0 +1,27 @@
+name: New rule or framework support
+description: Propose a new MCP-specific check, or support for another SDK/framework.
+labels: ["enhancement"]
+body:
+  - type: textarea
+    id: risk
+    attributes:
+      label: What is the risk?
+      description: How can it be exploited through an MCP client or an LLM? Link write-ups or CVEs if available.
+    validations:
+      required: true
+  - type: textarea
+    id: vulnerable
+    attributes:
+      label: Vulnerable example
+      render: text
+    validations:
+      required: true
+  - type: textarea
+    id: safe
+    attributes:
+      label: Safe example (the correct way to do the same thing)
+      render: text
+  - type: textarea
+    id: detection
+    attributes:
+      label: How could it be detected with low false positives?
