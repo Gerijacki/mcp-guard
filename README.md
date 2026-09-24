@@ -278,6 +278,23 @@ Those are excellent general tools, and you should keep using them. mcp-guard add
 </details>
 
 <details>
+<summary><b>How does it compare to other MCP scanners?</b></summary>
+
+Several good MCP security tools exist, and they mostly answer a different question: *"is what is installed on this machine safe?"* mcp-guard answers *"is the MCP server I am writing safe, on every commit?"* The tools are complementary. Summary from their public documentation as of September 2026:
+
+| | mcp-guard | [Snyk Agent Scan](https://github.com/snyk/agent-scan) | [Cisco MCP Scanner](https://github.com/cisco-ai-defense/mcp-scanner) | [MCP-Shield](https://github.com/riseandignite/mcp-shield) |
+|---|---|---|---|---|
+| Main use | CI / pre-commit for server authors | Audit agents, MCP servers and skills installed on a machine | Audit live servers, tool JSON and server source | Audit installed servers |
+| Analyzes | Server **source code** (Python, TS/JS, Go) + client configs | Tool descriptions fetched from servers | Tool descriptions (YARA, LLM, Cisco API); source via LLM-powered behavioral analysis | Tool descriptions |
+| How | Deterministic static analysis with taint tracking | Snyk API | YARA + LLM + API | Patterns + optional Claude |
+| Account / API key | None | Snyk token | Optional (LLM key for LLM/behavioral analysis) | Optional |
+| Runs the scanned server | Never | Starts stdio servers to read descriptions (asks for consent) | Connects to servers, or reads exported JSON | Connects to servers |
+| Distribution | Single static binary, Action, Docker, pre-commit | `uvx` / binary | Python package | `npx` |
+
+Use mcp-guard in the repository of every MCP server you build. Use an installed-server auditor on the machines where agents run.
+</details>
+
+<details>
 <summary><b>Does it execute my server or send code anywhere?</b></summary>
 
 No. It is fully offline static analysis. Nothing is executed, and no network access is needed.
