@@ -134,3 +134,18 @@ func contains(xs []string, x string) bool {
 	}
 	return false
 }
+
+func TestTextColorsUseEscapeSequences(t *testing.T) {
+	var buf bytes.Buffer
+	if err := Write(&buf, "text", sampleResult(), Options{Version: "dev", Color: true}); err != nil {
+		t.Fatal(err)
+	}
+	out := buf.String()
+	esc := string(rune(0x1b))
+	if strings.Contains(strings.ReplaceAll(out, esc+"[", ""), "[1;") {
+		t.Errorf("found an ANSI code without its ESC byte:\n%q", out)
+	}
+	if !strings.Contains(out, esc+"[1;91m1 critical") {
+		t.Errorf("summary is not colored:\n%q", out)
+	}
+}

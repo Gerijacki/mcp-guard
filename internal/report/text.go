@@ -27,11 +27,11 @@ var sevStyle = map[finding.Severity]string{
 // summaryStyle uses foreground colors only: inline background badges are hard to read
 // in many terminal themes.
 var summaryStyle = map[finding.Severity]string{
-	finding.Critical: "[1;91m",
-	finding.High:     "[1;31m",
-	finding.Medium:   "[1;33m",
-	finding.Low:      "[1;36m",
-	finding.Info:     "[2m",
+	finding.Critical: "\x1b[1;91m",
+	finding.High:     "\x1b[1;31m",
+	finding.Medium:   "\x1b[1;33m",
+	finding.Low:      "\x1b[1;36m",
+	finding.Info:     "\x1b[2m",
 }
 
 func writeText(w io.Writer, res *scanner.Result, opts Options) error {
