@@ -14,10 +14,10 @@ jobs:
   render:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 0
-      - uses: actions/setup-go@v5
+      - uses: actions/setup-go@v7
         with:
           go-version: stable
       - name: Build mcp-guard
@@ -29,7 +29,7 @@ jobs:
       - uses: charmbracelet/vhs-action@v2
         with:
           path: demo/demo.tape
-      - uses: stefanzweifel/git-auto-commit-action@v5
+      - uses: stefanzweifel/git-auto-commit-action@v7
         with:
           commit_message: "docs: update demo GIF"
           file_pattern: docs/demo.gif
