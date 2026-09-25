@@ -66,7 +66,7 @@ jobs:
         run: go test ./internal/rules -run '^$' -fuzz FuzzAnalyze -fuzztime 60s
       - name: Keep the failing input
         if: failure()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: fuzz-crashers
           path: internal/rules/testdata/fuzz
