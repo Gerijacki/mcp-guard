@@ -22,6 +22,15 @@ These IDs appear in three places:
 | [MCPG006](rules/MCPG006.md) unscoped-destructive-tool | MCP02 Privilege Escalation via Scope Creep | LLM06 Excessive Agency | ASI02 Tool Misuse |
 | [MCPG007](rules/MCPG007.md) tool-poisoning | MCP03 Tool Poisoning | LLM01 Prompt Injection | ASI01 Agent Goal Hijack, ASI04 Agentic Supply Chain Vulnerabilities |
 | [MCPG008](rules/MCPG008.md) exposed-network-transport | MCP07 Insufficient Authentication & Authorization | none | ASI03 Identity & Privilege Abuse |
+| [MCPG009](rules/MCPG009.md) server-side-request-forgery | MCP02 Privilege Escalation via Scope Creep | LLM06 Excessive Agency | ASI02 Tool Misuse |
+| [MCPG010](rules/MCPG010.md) unsafe-deserialization | MCP05 Command Injection & Execution | LLM05 Improper Output Handling | ASI05 Unexpected Code Execution |
+| [MCPG011](rules/MCPG011.md) unpinned-or-risky-server-launch | MCP04 Software Supply Chain Attacks & Dependency Tampering | LLM03 Supply Chain | ASI04 Agentic Supply Chain Vulnerabilities |
+| [MCPG012](rules/MCPG012.md) argument-injection | MCP05 Command Injection & Execution | LLM05 Improper Output Handling | ASI02 Tool Misuse |
+| [MCPG013](rules/MCPG013.md) secret-in-logs-or-output | MCP01 Token Mismanagement & Secret Exposure | LLM02 Sensitive Information Disclosure | ASI03 Identity & Privilege Abuse |
+| [MCPG014](rules/MCPG014.md) tls-verification-disabled | MCP07 Insufficient Authentication & Authorization | none | ASI03 Identity & Privilege Abuse |
+| [MCPG015](rules/MCPG015.md) oauth-scope-or-token-misuse | MCP02 Privilege Escalation via Scope Creep | LLM06 Excessive Agency | ASI03 Identity & Privilege Abuse |
+| [MCPG016](rules/MCPG016.md) definition-changed-since-lock | MCP03 Tool Poisoning | LLM03 Supply Chain | ASI04 Agentic Supply Chain Vulnerabilities |
+| [MCPG017](rules/MCPG017.md) duplicate-tool-name | MCP03 Tool Poisoning | none | ASI02 Tool Misuse |
 
 ## Rationale
 
@@ -33,6 +42,14 @@ These IDs appear in three places:
 - **MCPG007.** Instructions hidden in tool descriptions are the canonical MCP tool-poisoning attack. A third-party server that ships them is a supply-chain risk for every agent that installs it.
 - **MCPG008.** An HTTP/SSE transport bound to all interfaces without authentication lets anyone on the network call the tools. This is an authentication failure rather than a model-level risk, so there is no LLM Top 10 entry.
 
+- **MCPG009.** A server that fetches model-chosen URLs lets the agent reach what only the server can reach. It is excessive agency (LLM06) and tool misuse (ASI02).
+- **MCPG010, MCPG012.** Deserializing or importing model-chosen data, and parsing model-chosen values as CLI options, are further forms of untrusted model output handled as code (LLM05, MCP05).
+- **MCPG011.** Unpinned launches in client configs are the supply-chain half of the MCP Top 10 (MCP04, LLM03, ASI04).
+- **MCPG013.** Credentials in logs or tool results leak into model context and third-party log stores (MCP01, LLM02).
+- **MCPG014, MCPG015.** Disabled TLS verification and OAuth token passthrough are authentication failures (MCP07, MCP02); there is no LLM Top 10 entry for the former.
+
+- **MCPG016, MCPG017.** A tool whose description changes after review (rug pull) or that is registered twice (shadowing) are the supply-chain and poisoning attacks specific to MCP (MCP03, ASI04).
+
 ## Not covered
 
 mcp-guard is a static analyzer for server code and client configs. Several OWASP risks are runtime or organizational concerns that it does not attempt to detect:
@@ -42,7 +59,5 @@ mcp-guard is a static analyzer for server code and client configs. Several OWASP
 - ASI07 Insecure Inter-Agent Communication
 - ASI08 Cascading Failures
 - ASI10 Rogue Agents
-
-The [roadmap](../README.md#roadmap) mentions checks that would extend coverage of MCP04, LLM03 and ASI04 (unpinned `npx -y` packages in client configs).
 
 Custom rules can declare their own mapping with the `owasp` field. See [custom-rules.md](custom-rules.md).

@@ -321,6 +321,7 @@ type Stmt struct {
 	Text    string // comments removed
 	Line    int    // first line
 	EndLine int
+	Indent  int // byte column of the first character (statements at the lowest Indent of a body are top-level)
 }
 
 // Statements groups lines [startLine, endLine] into logical statements. Comments are
@@ -341,7 +342,8 @@ func (f *File) StatementsIn(start, end int) []Stmt {
 	)
 	flush := func(at int) {
 		if text := strings.TrimSpace(b.String()); text != "" && stmtStart >= 0 {
-			out = append(out, Stmt{Text: text, Line: f.LineAt(stmtStart), EndLine: f.LineAt(at)})
+			line := f.LineAt(stmtStart)
+			out = append(out, Stmt{Text: text, Line: line, EndLine: f.LineAt(at), Indent: stmtStart - f.LineStart(line)})
 		}
 		b.Reset()
 		stmtStart = -1
@@ -496,6 +498,72 @@ func Indent(line string) int {
 		}
 	}
 	return n
+}
+
+// MaskMultilineStrings blanks the contents of string literals that span several lines (Python
+// docstrings, multi-line template literals) and leaves single-line strings and comments alone.
+// Such blocks are documentation or embedded text far more often than configuration.
+func MaskMultilineStrings(s string, lang Language) string {
+	var b []byte
+	for i := 0; i < len(s); {
+		if end, ok := skipComment(s, i, lang); ok {
+			i = end
+			continue
+		}
+		if isQuote(s[i], lang) {
+			end := skipString(s, i, lang)
+			if end > i+2 && strings.Contains(s[i:end], "\n") {
+				if b == nil {
+					b = []byte(s)
+				}
+				for j := i + 1; j < end-1; j++ {
+					if b[j] != '\n' {
+						b[j] = ' '
+					}
+				}
+			}
+			i = end
+			continue
+		}
+		i++
+	}
+	if b == nil {
+		return s
+	}
+	return string(b)
+}
+
+// MaskStrings returns s with the contents of string literals replaced by spaces (quotes and
+// newlines kept, offsets unchanged). Comments are not touched. Rules use it to look for code
+// constructs without matching the text of messages, regular expressions or documentation.
+func MaskStrings(s string, lang Language) string {
+	var b []byte
+	for i := 0; i < len(s); {
+		if end, ok := skipComment(s, i, lang); ok {
+			i = end
+			continue
+		}
+		if isQuote(s[i], lang) {
+			end := skipString(s, i, lang)
+			if end > i+2 {
+				if b == nil {
+					b = []byte(s)
+				}
+				for j := i + 1; j < end-1; j++ {
+					if b[j] != '\n' {
+						b[j] = ' '
+					}
+				}
+			}
+			i = end
+			continue
+		}
+		i++
+	}
+	if b == nil {
+		return s
+	}
+	return string(b)
 }
 
 // maskComments returns s with every comment replaced by spaces (newlines kept), so that

@@ -28,8 +28,8 @@ jobs:
 What the Action does:
 
 1. downloads the release binary for the runner (Linux, macOS, Windows; x64 or ARM64),
-2. writes a SARIF report and uploads it to **code scanning**, so findings appear as pull request annotations and under *Security → Code scanning*,
-3. runs the scan again for a readable log, adds a summary to the job page, and fails the step according to `fail-on`.
+2. verifies the SHA-256 of the download against the release's `checksums.txt`,
+3. runs **one** scan that prints the log, writes the SARIF report and a Markdown job summary, then uploads the SARIF to **code scanning** (so findings appear as pull request annotations and under *Security → Code scanning*), even when the scan fails, and finally fails the step according to `fail-on`.
 
 ### Inputs
 
@@ -40,7 +40,7 @@ What the Action does:
 | `min-severity` | `low` | Hide findings below this severity |
 | `upload-sarif` | `true` | Upload to code scanning (needs `security-events: write`; not available to pull requests from forks) |
 | `sarif-file` | `mcp-guard.sarif` | Where the SARIF report is written (also exposed as the `sarif-file` output) |
-| `args` | | Extra flags, e.g. `--disable MCPG006 --include-tests` |
+| `args` | | Extra flags, whitespace-separated, e.g. `--disable MCPG006 --include-tests --baseline mcp-guard.baseline.json` |
 | `version` | `latest` | Release tag such as `v0.1.0`, `latest`, or `source` (build the action's checkout, which needs `actions/setup-go`) |
 
 Pin `version` (e.g. `v0.1.0`) if you want fully reproducible builds. The Action itself is referenced by the major tag `@v0`.
@@ -86,8 +86,13 @@ See [installation.md](installation.md#pre-commit).
 Turning on a new security check should not block every pull request on day one:
 
 1. **Observe:** run with `--fail-on none` and review the findings in code scanning.
-2. **Triage:** fix real issues. For accepted risks, add `mcp-guard:ignore <ID> -- reason` comments or tune `.mcp-guard.yaml` (`disable`, `severity`, `ignore`). Please report false positives.
-3. **Enforce:** switch to `--fail-on critical`, then `high` once the backlog is clear.
+2. **Baseline:** accept today's findings with `mcp-guard scan . --write-baseline mcp-guard.baseline.json`, commit the file, and scan with `--baseline mcp-guard.baseline.json` (for the Action: `args: --baseline mcp-guard.baseline.json`). CI then fails only on **new** findings, and the scan tells you when baseline entries have been fixed so you can shrink the file.
+3. **Triage:** fix real issues. For accepted risks, add `mcp-guard:ignore <ID> -- reason` comments (set `require-ignore-reason: true` to enforce the reason and `warn-unused-ignores: true` to catch stale ones) or tune `.mcp-guard.yaml` (`disable`, `severity`, `ignore`, `overrides` for parts of the tree). Please report false positives.
+4. **Enforce:** switch to `--fail-on critical`, then `high` once the backlog is clear.
+
+On big pull requests you can scan only what changed: `mcp-guard scan . --changed-since origin/main` (check out with `fetch-depth: 0`). Cross-file helper resolution is limited to the files that were scanned.
+
+To also catch tool descriptions that **change after review** (rug pulls), commit a lock file (`mcp-guard lock .`) and scan with `--lock mcp-guard.lock` (see [MCPG016](rules/MCPG016.md)).
 
 ## Scanning third-party MCP servers before you install them
 

@@ -18,9 +18,18 @@ var destructiveVerbs = map[string]bool{
 	"kill": true, "terminate": true, "truncate": true, "purge": true, "wipe": true, "erase": true,
 	"exec": true, "execute": true, "shell": true, "uninstall": true, "revoke": true,
 	"shutdown": true, "reboot": true, "overwrite": true, "unlink": true, "transfer": true, "deploy": true,
+	"prune": true, "flush": true, "refund": true, "rollback": true,
 }
 
-var scopeMarkerRe = regexp.MustCompile(`(?i)confirm|dry[_-]?run|allow[_-]?list|allowed|validat|sandbox|restrict|whitelist|block[_-]?list|deny[_-]?list|\bmax[_-]?\w+|\blimit|rate[_-]?limit|throttle|approv|elicit|protected|forbidden|read[_-]?only|safe[_-]?(?:guard|mode)|require[_-]?(?:confirmation|approval)|quota|budget|cooldown|\bMAX_|ALLOWED_|PROTECTED_`)
+// destructiveOps finds irreversible operations in a handler whose name does not say so
+// (a tool called "cleanup" that runs rmtree, "sync" that issues DELETE FROM).
+var destructiveOps = compileByLang(map[source.Language]string{
+	source.Python:     `\bshutil\.rmtree\s*\(|\bos\.(?:remove|unlink|rmdir|removedirs)\s*\(|\.unlink\s*\(|\b(?:DROP\s+(?:TABLE|DATABASE)|DELETE\s+FROM|TRUNCATE\s+TABLE)\b|\b(?:requests|httpx)\.delete\s*\(`,
+	source.TypeScript: `\b(?:rmSync|unlinkSync|rmdirSync)\s*\(|\bfs(?:\.promises)?\.(?:rm|unlink|rmdir)\s*\(|\b(?:DROP\s+(?:TABLE|DATABASE)|DELETE\s+FROM|TRUNCATE\s+TABLE)\b|\baxios\.delete\s*\(|method\s*:\s*['"]DELETE['"]`,
+	source.Go:         `\bos\.(?:Remove|RemoveAll)\s*\(|\b(?:DROP\s+(?:TABLE|DATABASE)|DELETE\s+FROM|TRUNCATE\s+TABLE)\b|\bhttp\.MethodDelete\b`,
+})
+
+var scopeMarkerRe = regexp.MustCompile(`(?i)confirm|dry[_-]?run|allow[_-]?list|allowed|validat|sandbox|restrict|whitelist|block[_-]?list|deny[_-]?list|\bmax_\w+|\bmax(?:Count|Items|Results|Files|Rows|Deletes|Batch)\b|\blimit|rate[_-]?limit|throttle|approv|elicit|protected|forbidden|read[_-]?only|safe[_-]?(?:guard|mode)|require[_-]?(?:confirmation|approval)|quota|budget|cooldown|\bMAX_|ALLOWED_|PROTECTED_`)
 
 func (destructiveRule) Meta() Meta {
 	return Meta{
@@ -44,22 +53,36 @@ func (destructiveRule) Meta() Meta {
 func (r destructiveRule) Check(f *source.File) []finding.Finding {
 	var out []finding.Finding
 	for _, t := range toolBodies(f) {
-		if t.Dispatcher || t.Hint("readOnlyHint") == "true" {
+		// Resources and prompts only read; a name like "deploy-status" is not an action.
+		if t.Dispatcher || t.Kind != "" || t.Hint("readOnlyHint") == "true" {
 			continue
 		}
 		annotated := t.Hint("destructiveHint") == "true"
 		verb := destructiveWord(t.Name)
-		if !annotated && (verb == "" || t.Hint("destructiveHint") == "false") {
+		if !annotated && t.Hint("destructiveHint") == "false" {
 			continue
 		}
-		if scopeMarkerRe.MatchString(f.BodyText(t)) {
+		code := f.CodeText(t)
+		op := ""
+		if verb == "" && !annotated {
+			if re := destructiveOps[f.Language]; re != nil {
+				op = strings.TrimSpace(re.FindString(code))
+			}
+			if op == "" {
+				continue
+			}
+		}
+		if scopeMarkerRe.MatchString(code) {
 			continue
 		}
 		var msg string
-		if annotated {
-			msg = fmt.Sprintf("Tool %q is marked destructive (destructiveHint: true) but its handler has no confirmation, allowlist or limit.", t.Name)
-		} else {
-			msg = fmt.Sprintf("Tool %q looks destructive (%q) but its handler has no confirmation, allowlist or limit, and it does not declare destructiveHint: true.", t.Name, verb)
+		switch {
+		case op != "":
+			msg = fmt.Sprintf("%s %q performs a destructive operation (%s) but its handler has no confirmation, allowlist or limit, and it does not declare destructiveHint: true.", t.Noun(), t.Name, op)
+		case annotated:
+			msg = fmt.Sprintf("%s %q is marked destructive (destructiveHint: true) but its handler has no confirmation, allowlist or limit.", t.Noun(), t.Name)
+		default:
+			msg = fmt.Sprintf("%s %q looks destructive (%q) but its handler has no confirmation, allowlist or limit, and it does not declare destructiveHint: true.", t.Noun(), t.Name, verb)
 		}
 		out = append(out, newFinding(r.Meta(), f, t.Line, finding.Medium, t.Name, msg))
 	}

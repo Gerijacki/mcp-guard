@@ -28,9 +28,16 @@ type CustomSpec struct {
 	HelpURL     string   `yaml:"help-url"`
 	Languages   []string `yaml:"languages"`
 	// Scope is where the pattern is matched: "file" (every line, default), "tool-body"
-	// (statements inside tool handlers) or "tool-description" (tool/parameter descriptions).
+	// (statements inside tool handlers), "tool-description" (tool/parameter descriptions),
+	// "tool-name", "tool-body-absent" (tools whose handler does NOT match) or "config-server"
+	// (command, args and url of MCP client config entries).
 	Scope   string `yaml:"scope"`
 	Pattern string `yaml:"pattern"`
+	// Tools restricts the tool scopes to tools whose name matches this regular expression.
+	Tools string `yaml:"tools"`
+	// Sanitizers (tool-body with requires-tainted-input) are expressions that make a value safe:
+	// an assignment whose right-hand side matches one stops carrying tool input.
+	Sanitizers []string `yaml:"sanitizers"`
 	// RequiresTaintedInput (tool-body only) reports a match only when the statement also
 	// uses a value derived from a tool parameter.
 	RequiresTaintedInput bool     `yaml:"requires-tainted-input"`
@@ -49,6 +56,8 @@ type customRule struct {
 	pattern   *regexp.Regexp
 	unless    []*regexp.Regexp
 	needTaint bool
+	tools     *regexp.Regexp
+	sanitizer *regexp.Regexp
 }
 
 var customIDRe = regexp.MustCompile(`^[A-Z][A-Z0-9_-]{2,31}$`)
@@ -123,14 +132,30 @@ func CompileCustom(s CustomSpec) (Rule, error) {
 		scope = "file"
 	}
 	switch scope {
-	case "file", "tool-body", "tool-description":
+	case "file", "tool-body", "tool-description", "tool-name", "tool-body-absent", "config-server":
 	default:
-		return nil, fmt.Errorf("scope %q: want file, tool-body or tool-description", scope)
+		return nil, fmt.Errorf("scope %q: want file, tool-body, tool-description, tool-name, tool-body-absent or config-server", scope)
 	}
 	if s.RequiresTaintedInput && scope != "tool-body" {
 		return nil, errors.New("requires-tainted-input is only valid with scope: tool-body")
 	}
+	if len(s.Sanitizers) > 0 && !s.RequiresTaintedInput {
+		return nil, errors.New("sanitizers only apply together with requires-tainted-input")
+	}
+	if s.Tools != "" && !strings.HasPrefix(scope, "tool-") {
+		return nil, errors.New("tools is only valid with the tool-* scopes")
+	}
 	r := &customRule{scope: scope, pattern: re, needTaint: s.RequiresTaintedInput, message: s.Message}
+	if s.Tools != "" {
+		if r.tools, err = regexp.Compile(s.Tools); err != nil {
+			return nil, fmt.Errorf("tools: %w", err)
+		}
+	}
+	if len(s.Sanitizers) > 0 {
+		if r.sanitizer, err = regexp.Compile("(?:" + strings.Join(s.Sanitizers, ")|(?:") + ")"); err != nil {
+			return nil, fmt.Errorf("sanitizers: %w", err)
+		}
+	}
 	if len(s.Languages) > 0 {
 		r.langs = map[source.Language]bool{}
 		for _, l := range s.Languages {
@@ -185,7 +210,10 @@ func (r *customRule) Check(f *source.File) []finding.Finding {
 		}
 	case "tool-body":
 		for _, t := range toolBodies(f) {
-			walkTaint(f, t, nil, func(st source.Stmt, taint *taintSet) {
+			if !r.wantsTool(t) {
+				continue
+			}
+			walkTaint(f, t, r.sanitizer, func(st source.Stmt, taint *taintSet) {
 				loc := r.pattern.FindStringIndex(st.Text)
 				if loc == nil || r.excluded(st.Text) {
 					return
@@ -197,8 +225,20 @@ func (r *customRule) Check(f *source.File) []finding.Finding {
 				emit(st.Line, t.Name, p)
 			})
 		}
+	case "tool-body-absent":
+		for _, t := range toolBodies(f) {
+			if !r.wantsTool(t) || t.Dispatcher {
+				continue
+			}
+			if code := f.CodeText(t); !r.pattern.MatchString(code) && !r.excluded(code) {
+				emit(t.Line, t.Name, "")
+			}
+		}
 	case "tool-description":
 		for _, t := range f.Tools {
+			if !r.wantsTool(t) {
+				continue
+			}
 			text := strings.Join(append([]string{t.Description}, t.ParamDescriptions...), "\n")
 			if r.pattern.MatchString(text) && !r.excluded(text) {
 				n := t.DescriptionLine
@@ -208,8 +248,26 @@ func (r *customRule) Check(f *source.File) []finding.Finding {
 				emit(n, t.Name, "")
 			}
 		}
+	case "tool-name":
+		for _, t := range f.Tools {
+			if r.wantsTool(t) && r.pattern.MatchString(t.Name) && !r.excluded(t.Name) {
+				emit(t.Line, t.Name, "")
+			}
+		}
+	case "config-server":
+		for _, srv := range f.Servers {
+			text := strings.TrimSpace(srv.Command + " " + strings.Join(srv.Args, " ") + " " + srv.URL)
+			if r.pattern.MatchString(text) && !r.excluded(text) {
+				emit(srv.Line, srv.Name, "")
+			}
+		}
 	}
 	return out
+}
+
+// wantsTool applies the optional "tools" name filter.
+func (r *customRule) wantsTool(t source.Tool) bool {
+	return r.tools == nil || r.tools.MatchString(t.Name)
 }
 
 func (r *customRule) excluded(text string) bool {

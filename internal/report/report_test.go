@@ -71,7 +71,7 @@ func TestSARIF(t *testing.T) {
 		t.Fatalf("bad envelope: %+v", log)
 	}
 	run := log.Runs[0]
-	if run.Tool.Driver.Name != "mcp-guard" || len(run.Tool.Driver.Rules) != 8 {
+	if run.Tool.Driver.Name != "mcp-guard" || len(run.Tool.Driver.Rules) != len(rules.Builtin()) {
 		t.Fatalf("bad driver: %+v", run.Tool.Driver)
 	}
 	if len(run.Results) != 1 {

@@ -47,8 +47,12 @@ func writeText(w io.Writer, res *scanner.Result, opts Options) error {
 		help[m.ID] = m.Help()
 	}
 
+	counts := plural(res.ToolsFound, "MCP tool")
+	if res.ResourcesFound+res.PromptsFound > 0 {
+		counts += fmt.Sprintf(" + %d resources/prompts", res.ResourcesFound+res.PromptsFound)
+	}
 	fmt.Fprintf(bw, "%s %s  ·  %s  ·  %s  ·  %s\n\n", paint(bold, "mcp-guard"), opts.Version,
-		plural(res.FilesScanned, "file"), plural(res.ToolsFound, "MCP tool"), plural(res.ConfigsFound, "client config"))
+		plural(res.FilesScanned, "file"), counts, plural(res.ConfigsFound, "client config"))
 
 	for _, f := range res.Findings {
 		label := fmt.Sprintf(" %-8s ", strings.ToUpper(f.Severity.String()))
@@ -80,7 +84,26 @@ func writeText(w io.Writer, res *scanner.Result, opts Options) error {
 		}
 		fmt.Fprintf(bw, "%s %s\n", paint(bold, "Found "+plural(len(res.Findings), "issue")+":"), strings.Join(parts, ", "))
 	}
+	if n := res.Skipped.Total(); n > 0 {
+		fmt.Fprintf(bw, "%s\n", paint(dim, fmt.Sprintf("%s skipped (%s)", plural(n, "file"), skippedDetail(res.Skipped))))
+	}
+	if res.Baselined > 0 {
+		fmt.Fprintf(bw, "%s\n", paint(dim, fmt.Sprintf("%s hidden by the baseline", plural(res.Baselined, "existing finding"))))
+	}
 	return bw.Flush()
+}
+
+func skippedDetail(c scanner.SkipCounts) string {
+	var parts []string
+	for _, p := range []struct {
+		n    int
+		what string
+	}{{c.TooLarge, "too large"}, {c.Binary, "binary"}, {c.Unreadable, "unreadable"}, {c.TimedOut, "timed out"}, {c.Failed, "internal error"}} {
+		if p.n > 0 {
+			parts = append(parts, fmt.Sprintf("%d %s", p.n, p.what))
+		}
+	}
+	return strings.Join(parts, ", ")
 }
 
 func plural(n int, noun string) string {

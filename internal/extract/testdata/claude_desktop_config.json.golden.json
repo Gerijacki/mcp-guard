@@ -1,0 +1,33 @@
+{
+  "servers": [
+    {
+      "Name": "filesystem",
+      "Line": 3,
+      "Command": "npx",
+      "Args": [
+        "-y",
+        "@modelcontextprotocol/server-filesystem",
+        "/Users/me/Desktop"
+      ],
+      "URL": "",
+      "Env": null,
+      "Headers": null
+    },
+    {
+      "Name": "github",
+      "Line": 7,
+      "Command": "docker",
+      "Args": [
+        "run",
+        "-i",
+        "--rm",
+        "ghcr.io/github/github-mcp-server"
+      ],
+      "URL": "",
+      "Env": {
+        "GITHUB_PERSONAL_ACCESS_TOKEN": "${GITHUB_TOKEN}"
+      },
+      "Headers": null
+    }
+  ]
+}

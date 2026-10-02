@@ -1,0 +1,62 @@
+{
+  "tools": [
+    {
+      "name": "read_file",
+      "line": 10,
+      "params": [
+        "path"
+      ],
+      "description": "Read a text file.\n\nReturns the file content.",
+      "body_lines": [
+        12,
+        17
+      ]
+    },
+    {
+      "name": "delete_file",
+      "line": 20,
+      "params": [
+        "target"
+      ],
+      "description": "Delete a file from disk",
+      "param_descriptions": [
+        "File to delete"
+      ],
+      "annotations": {
+        "destructivehint": "true"
+      },
+      "body_lines": [
+        26,
+        29
+      ]
+    },
+    {
+      "name": "ping",
+      "line": 32,
+      "params": [],
+      "body_lines": [
+        33,
+        33
+      ]
+    },
+    {
+      "name": "summarize_text",
+      "line": 41,
+      "params": [
+        "text",
+        "max_words"
+      ],
+      "description": "Summarize text.",
+      "body_lines": [
+        37,
+        38
+      ]
+    }
+  ],
+  "functions": [
+    "ping()",
+    "read_file(path)",
+    "remove(target)",
+    "summarize(text,max_words)"
+  ]
+}

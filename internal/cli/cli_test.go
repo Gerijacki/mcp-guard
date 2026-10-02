@@ -7,6 +7,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/Gerijacki/mcp-guard/internal/rules"
 )
 
 func run(args ...string) (int, string, string) {
@@ -116,7 +118,7 @@ func TestCustomRulesFlag(t *testing.T) {
 
 func TestRulesAndVersion(t *testing.T) {
 	code, out, _ := run("rules")
-	if code != ExitOK || strings.Count(out, "MCPG") != 8 {
+	if code != ExitOK || strings.Count(out, "MCPG") != len(rules.Builtin()) {
 		t.Errorf("rules list:\n%s", out)
 	}
 	code, out, _ = run("rules", "explain", "mcpg003")

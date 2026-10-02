@@ -65,7 +65,7 @@ $ mcp-guard scan path/to/your-mcp-server
 Found 11 issues: 3 critical, 4 high, 4 medium
 ```
 
-Try it on the deliberately vulnerable server in [`examples/vulnerable-server`](examples/vulnerable-server), which triggers all 8 rules.
+Try it on the deliberately vulnerable server in [`examples/vulnerable-server`](examples/vulnerable-server), which triggers every rule.
 
 ## Install
 
@@ -93,6 +93,15 @@ The install scripts verify the SHA-256 of the download against the release's `ch
 | [MCPG006](docs/rules/MCPG006.md) | unscoped-destructive-tool | medium | Destructive tool (`destructiveHint`, `delete_*`, `kill_*`…) with no confirmation, allowlist or limit | MCP02, LLM06, ASI02 |
 | [MCPG007](docs/rules/MCPG007.md) | tool-poisoning | high | Hidden instructions, `<IMPORTANT>` tags, invisible Unicode, or tool shadowing in descriptions | MCP03, LLM01, ASI01, ASI04 |
 | [MCPG008](docs/rules/MCPG008.md) | exposed-network-transport | medium | HTTP/SSE transport bound to `0.0.0.0` with no authentication | MCP07, ASI03 |
+| [MCPG009](docs/rules/MCPG009.md) | server-side-request-forgery | high | Tool parameter chooses the host of an outgoing HTTP request (cloud metadata, localhost, internal services) | MCP02, LLM06, ASI02 |
+| [MCPG010](docs/rules/MCPG010.md) | unsafe-deserialization | critical | Tool parameter reaches `pickle`, unsafe `yaml.load`, `torch.load`, or a dynamic `import`/`require` | MCP05, LLM05, ASI05 |
+| [MCPG011](docs/rules/MCPG011.md) | unpinned-or-risky-server-launch | medium | Client configs that run unpinned `npx`/`uvx`/Docker images, `curl \| sh`, privileged containers or plain-http servers | MCP04, LLM03, ASI04 |
+| [MCPG012](docs/rules/MCPG012.md) | argument-injection | high | Tool parameter in the argv of `git`/`curl`/`tar`… without `--`, parsed as an option | MCP05, LLM05, ASI02 |
+| [MCPG013](docs/rules/MCPG013.md) | secret-in-logs-or-output | medium | Credentials from the environment written to logs or returned to the model; environment dumps | MCP01, LLM02, ASI03 |
+| [MCPG014](docs/rules/MCPG014.md) | tls-verification-disabled | medium | `verify=False`, `rejectUnauthorized: false`, `InsecureSkipVerify: true` | MCP07, ASI03 |
+| [MCPG015](docs/rules/MCPG015.md) | oauth-scope-or-token-misuse | medium | Wildcard/admin OAuth scopes and forwarding the client's access token downstream | MCP02, LLM06, ASI03 |
+| [MCPG016](docs/rules/MCPG016.md) | definition-changed-since-lock | high | With `--lock`: a tool description, parameter list or server launch command differs from the reviewed `mcp-guard.lock` (rug pull) | MCP03, LLM03, ASI04 |
+| [MCPG017](docs/rules/MCPG017.md) | duplicate-tool-name | low | The same tool name is registered twice in one file; the second silently shadows the first | MCP03, ASI02 |
 
 Every rule is mapped to the [OWASP MCP Top 10, LLM Top 10 and Agentic Top 10](docs/owasp.md). `mcp-guard rules explain <ID>` prints the rationale and the fix for any rule in your terminal. You can add your own rules in YAML ([custom rules](docs/custom-rules.md)).
 
@@ -100,10 +109,12 @@ Every rule is mapped to the [OWASP MCP Top 10, LLM Top 10 and Agentic Top 10](do
 
 | Language | Recognized |
 |---|---|
-| Python | Official SDK / FastMCP: `@mcp.tool()`, `mcp.add_tool()`, low-level `@server.call_tool()` and `types.Tool(...)` |
-| TypeScript / JavaScript | `@modelcontextprotocol/sdk`: `server.tool()`, `server.registerTool()`, `setRequestHandler(CallToolRequestSchema)`, `{ name, description, inputSchema }` definitions |
-| Go | [mark3labs/mcp-go](https://github.com/mark3labs/mcp-go) (`mcp.NewTool`, `s.AddTool`) and the [official Go SDK](https://github.com/modelcontextprotocol/go-sdk) (`mcp.AddTool`, `&mcp.Tool{}`) |
-| Client configs | Claude Desktop, Claude Code (`.mcp.json`), VS Code, Cursor, Windsurf, Cline, Zed: any JSON/JSONC with an `mcpServers`/`servers` map |
+| Python | Official SDK / FastMCP: `@mcp.tool()` (also bare `@tool`), `mcp.add_tool()` / `Tool.from_function()`, low-level `@server.call_tool()` and `types.Tool(...)`, plus `@mcp.resource()` and `@mcp.prompt()` |
+| TypeScript / JavaScript | `@modelcontextprotocol/sdk`: `server.tool()`, `server.registerTool()`, `server.resource()`, `server.prompt()`, `setRequestHandler(CallToolRequestSchema)`, `{ name, description, inputSchema }` definitions; `fastmcp`: `server.addTool({ ... })` |
+| Go | [mark3labs/mcp-go](https://github.com/mark3labs/mcp-go) (`mcp.NewTool`, `s.AddTool`, `AddPrompt`, `AddResource`) and the [official Go SDK](https://github.com/modelcontextprotocol/go-sdk) (`mcp.AddTool`, `&mcp.Tool{}`) |
+| Client configs | Claude Desktop, Claude Code (`.mcp.json`), VS Code, Cursor, Windsurf, Cline, Zed: any JSON/JSONC with an `mcpServers`/`servers` map; Codex `config.toml` (`[mcp_servers.*]`); Continue-style YAML |
+
+Helper functions are followed too: when a tool passes a model-controlled value to a function, even one defined in another file, the rules analyze that function with the value tainted and report at the real sink.
 
 ## Usage
 
@@ -114,6 +125,10 @@ mcp-guard scan . --fail-on critical          # only fail on critical findings
 mcp-guard scan . --format sarif -o mcp-guard.sarif
 mcp-guard scan . --format json | jq '.findings[] | select(.severity == "critical")'
 mcp-guard scan . --disable MCPG006 --ignore examples/
+mcp-guard scan . --baseline baseline.json    # only new findings (create it with --write-baseline)
+mcp-guard scan . --changed-since origin/main # only files changed since a git ref
+mcp-guard tools .                            # what was extracted: tools, parameters, handlers, configs
+mcp-guard lock . && mcp-guard scan . --lock mcp-guard.lock   # detect changed descriptions (rug pulls)
 mcp-guard rules                              # list rules
 mcp-guard rules explain MCPG007              # rationale and fix
 mcp-guard version
@@ -121,18 +136,27 @@ mcp-guard version
 
 | Flag | Default | Description |
 |---|---|---|
-| `--format`, `-f` | `text` | `text`, `json` or `sarif` |
+| `--format`, `-f` | `text` | `text`, `json`, `sarif`, `markdown` or `github` (workflow annotations) |
 | `--output`, `-o` | stdout | Write the report to a file |
+| `--also` | | Write another report from the same scan, `format=path` (repeatable) |
 | `--fail-on` | `high` | Exit 1 when a finding has at least this severity (`none` never fails) |
 | `--min-severity` | `low` | Hide findings below this severity (`info` adds quality hints) |
 | `--disable` | | Rule IDs to turn off (comma-separated, repeatable) |
 | `--ignore` | | Glob of paths to skip (repeatable) |
 | `--rules` | | Custom YAML rule file or directory (repeatable) |
 | `--include-tests` | `false` | Also scan tests (`tests/`, `*_test.go`, `*.test.ts`…), which are skipped by default |
-| `--config` | `.mcp-guard.yaml` | Config file (looked up in the scanned directory) |
+| `--baseline` | | Only report findings that are not in this baseline file |
+| `--write-baseline` | | Write the current findings to a baseline file and exit 0 |
+| `--changed-since` | | Only scan files changed since this git ref (plus untracked files) |
+| `--lock` | | Check tool definitions and server commands against a lock file (MCPG016) |
+| `--strict` | `false` | Exit 2 when any file could not be analyzed |
+| `--require-ignore-reason` | `false` | Ignore `mcp-guard:ignore` comments that give no reason |
+| `--warn-unused-ignores` | `false` | Warn about `mcp-guard:ignore` comments that suppress nothing |
+| `--workers`, `--max-file-size`, `--timeout` | CPUs, 1 MiB, 10s | Parallelism and per-file limits |
+| `--config` | `.mcp-guard.yaml` | Config file (looked up in the scanned directory, then in parent directories up to the git root) |
 | `--no-color` | `false` | Plain output (`NO_COLOR` is honored too) |
 
-**Exit codes:** `0` = nothing at or above `--fail-on`, `1` = findings at or above it, `2` = usage or runtime error.
+**Exit codes:** `0` = nothing at or above `--fail-on`, `1` = findings at or above it, `2` = usage or runtime error (or, with `--strict`, a file that could not be analyzed).
 
 ## How it works
 
@@ -141,7 +165,7 @@ flowchart LR
     A[Walk repository<br/>skip deps, build output, tests] --> B[Per file: detect language]
     B --> C[Extract MCP tools<br/>name, description, annotations,<br/>params, handler body]
     B --> D[Parse MCP client configs<br/>servers, env, headers]
-    C --> E[Taint-lite analysis<br/>params → assignments → sinks<br/>sanitizers break the flow]
+    C --> E[Taint-lite analysis<br/>params → assignments → helpers → sinks<br/>sanitizers break the flow]
     C --> F[Description checks<br/>tool poisoning]
     D --> G[Secret checks]
     E & F & G --> H[Suppressions, overrides,<br/>dedupe, fingerprints]
@@ -150,10 +174,10 @@ flowchart LR
 
 1. **Walk:** dependencies (`node_modules`, `vendor`, virtualenvs), build output, lockfiles, binaries, huge files and tests are skipped. Each file gets a time budget, so a malicious repository cannot hang your CI.
 2. **Extract:** a small language-aware lexer (strings, comments, brackets; no cgo, no external parser) recognizes how each SDK registers tools, and resolves handlers passed by name.
-3. **Analyze:** inside each handler, values derived from tool parameters are followed through assignments to dangerous sinks (shell, filesystem, SQL, `eval`…). Sanitizers such as `shlex.quote`, `Path.resolve().is_relative_to()`, `filepath.IsLocal` or parameterized queries break the flow. Descriptions, configs and transports get their own checks.
+3. **Analyze:** inside each handler, values derived from tool parameters are followed through assignments, and into the helper functions they are passed to (in the same file or, when the call is unambiguous, another one), to dangerous sinks (shell, filesystem, SQL, HTTP requests, `eval`, deserializers…). Sanitizers such as `shlex.quote`, `Path.resolve().is_relative_to()`, `filepath.IsLocal` or parameterized queries break the flow. Descriptions, configs and transports get their own checks.
 4. **Report:** findings carry a stable fingerprint (for code-scanning deduplication), redacted snippets (secrets are never printed in full) and a link to the rule documentation.
 
-It is a fast, precision-first heuristic analyzer, not a full dataflow engine. The trade-offs and known limitations are in [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
+Precision is measured, not assumed: `benchmark/corpus.yaml` pins public MCP repositories with every finding labelled true or false positive, and CI fails if per-rule precision drops. It is a fast, precision-first heuristic analyzer, not a full dataflow engine. The trade-offs and known limitations are in [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
 
 ## Output formats
 
@@ -167,7 +191,10 @@ It is a fast, precision-first heuristic analyzer, not a full dataflow engine. Th
   "summary": {
     "files_scanned": 2,
     "tools_found": 7,
+    "resources_found": 0,
+    "prompts_found": 0,
     "configs_found": 1,
+    "files_skipped": 0,
     "findings": 11,
     "by_severity": { "critical": 3, "high": 4, "medium": 4, "low": 0, "info": 0 }
   },
@@ -183,7 +210,8 @@ It is a fast, precision-first heuristic analyzer, not a full dataflow engine. Th
       "tool": "run_diagnostics",
       "fingerprint": "5f0c…"
     }
-  ]
+  ],
+  "warnings": []
 }
 ```
 </details>
@@ -260,7 +288,7 @@ Write organization-specific checks without touching Go:
 rules:
   - id: ACME001
     severity: high
-    scope: tool-body               # file | tool-body | tool-description
+    scope: tool-body               # file | tool-body | tool-description | tool-name | tool-body-absent | config-server
     languages: [python]
     pattern: '\brequests\.delete\s*\('
     requires-tainted-input: true
@@ -320,10 +348,10 @@ Test suites are full of intentionally fake tokens and toy tools. Use `--include-
 
 ## Roadmap
 
-- More MCP-specific rules: SSRF in fetch tools, unsafe deserialization, unpinned `npx -y` / `uvx` packages and over-broad scopes in client configs, secrets logged from tool arguments
-- Cross-file handler resolution and helper summaries
-- Baseline files (report only new findings)
+- A real parser behind the extractors (tree-sitter or per-language parsers) for exact scoping, imports and aliases
+- More SDKs and languages (Java, Kotlin, C#, Rust)
 - Scanning published servers directly (npm/PyPI package or container image)
+- DNS-rebinding and Origin-validation checks for local HTTP servers
 
 Ideas and votes are welcome in [Discussions](https://github.com/Gerijacki/mcp-guard/discussions).
 

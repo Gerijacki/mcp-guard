@@ -61,9 +61,29 @@ func FuzzAnalyze(f *testing.F) {
 			}
 		}
 		for _, r := range all {
-			for _, fd := range r.Check(file) {
+			first := r.Check(file)
+			for _, fd := range first {
 				if fd.Line < 1 || fd.Line > len(file.Lines) {
 					t.Fatalf("%s reported line %d of a %d-line file", fd.RuleID, fd.Line, len(file.Lines))
+				}
+			}
+			// Oracles that can expose false positives and negatives, not just crashes:
+			// the result is stable across runs...
+			if a, b := describe(first), describe(r.Check(file)); a != b {
+				t.Fatalf("%s is not idempotent:\n%s\n%s", r.Meta().ID, a, b)
+			}
+		}
+		// ...and a comment line at the top of a code file changes nothing.
+		if lang.IsCode() {
+			comment := "// fuzz comment\n"
+			if lang == source.Python {
+				comment = "# fuzz comment\n"
+			}
+			shifted := source.NewFile("fuzz", lang, comment+content)
+			extract.Extract(shifted)
+			for _, r := range all {
+				if a, b := len(r.Check(file)), len(r.Check(shifted)); a != b {
+					t.Fatalf("%s: %d findings, %d after adding a leading comment line", r.Meta().ID, a, b)
 				}
 			}
 		}

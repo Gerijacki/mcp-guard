@@ -30,3 +30,5 @@ Better still, use [MCP elicitation](https://modelcontextprotocol.io/specificatio
 ## How it is detected
 
 Tools with a handler whose `destructiveHint` is `true`, or whose name contains a destructive verb, and whose handler does not mention confirmation, dry-run, allowlists, validation, sandboxes, limits, quotas, throttling or approval. Tools with `readOnlyHint: true` or an explicit `destructiveHint: false` are skipped.
+
+A tool whose name does not say so is also reported when its handler performs an irreversible operation (`shutil.rmtree`, `os.remove`, `DELETE FROM`, `DROP TABLE`, `requests.delete`, `fs.rm`, `os.RemoveAll`, …). The guard evidence is looked up in the code, not in comments or docstrings, and `max_…`/`limit` must be an actual identifier.

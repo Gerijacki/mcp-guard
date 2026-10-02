@@ -36,4 +36,6 @@ Delimiting does not make injection impossible, but it helps the model and downst
 
 ## How it is detected
 
+The fetched value has to reach the model: the rule follows the result of the call (and anything assigned from it) to a `return` or `yield`. A tool that posts to a webhook, checks a status code or only returns a constant is not reported. Reading `resp.status_code` / `.ok` does not count as returning content.
+
 A handler that calls a network client (`requests`, `httpx`, `urllib`, `aiohttp`, `fetch`, `axios`, `got`, `http.Get`, `client.Do`, headless browsers, …) and contains no sanitizing or marking step (`sanitize`, `untrusted`, `escape_html`, `DOMPurify`, `bleach`, `<untrusted-content>`, prompt-injection detectors, …).

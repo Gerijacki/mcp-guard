@@ -74,3 +74,52 @@ func TestFind(t *testing.T) {
 		t.Errorf(".yaml should take precedence, got %q", got)
 	}
 }
+
+func TestFindUpStopsAtGitRoot(t *testing.T) {
+	root := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(root, ".git"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	sub := filepath.Join(root, "a", "b")
+	if err := os.MkdirAll(sub, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if got := FindUp(sub); got != "" {
+		t.Errorf("no config anywhere, got %q", got)
+	}
+	cfg := filepath.Join(root, ".mcp-guard.yaml")
+	if err := os.WriteFile(cfg, []byte("fail-on: low\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if got := FindUp(sub); got != cfg {
+		t.Errorf("FindUp(%s) = %q, want %q", sub, got, cfg)
+	}
+	// A closer config wins.
+	near := filepath.Join(root, "a", ".mcp-guard.yml")
+	os.WriteFile(near, []byte("fail-on: none\n"), 0o644)
+	if got := FindUp(sub); got != near {
+		t.Errorf("closest config should win, got %q", got)
+	}
+}
+
+func TestFindUpWithoutGitChecksOnlyTheDirectory(t *testing.T) {
+	outer := t.TempDir()
+	os.WriteFile(filepath.Join(outer, ".mcp-guard.yaml"), []byte("fail-on: low\n"), 0o644)
+	inner := filepath.Join(outer, "inner")
+	os.MkdirAll(inner, 0o755)
+	if got := FindUp(inner); got != "" {
+		t.Errorf("outside a git repo parents must not be searched, got %q", got)
+	}
+}
+
+func TestLoadOverridesAndIgnoreOptions(t *testing.T) {
+	p := filepath.Join(t.TempDir(), ".mcp-guard.yaml")
+	os.WriteFile(p, []byte("require-ignore-reason: true\nwarn-unused-ignores: true\noverrides:\n  - path: scripts/**\n    disable: [MCPG006]\n"), 0o644)
+	c, err := Load(p)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !c.RequireIgnoreReason || !c.WarnUnusedIgnores || len(c.Overrides) != 1 || c.Overrides[0].Path != "scripts/**" || c.Overrides[0].Disable[0] != "MCPG006" {
+		t.Errorf("config = %+v", c)
+	}
+}

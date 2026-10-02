@@ -1,0 +1,27 @@
+{
+  "servers": [
+    {
+      "Name": "remote",
+      "Line": 11,
+      "Command": "",
+      "Args": null,
+      "URL": "https://mcp.vendor.dev/sse",
+      "Env": null,
+      "Headers": null
+    },
+    {
+      "Name": "search",
+      "Line": 4,
+      "Command": "npx",
+      "Args": [
+        "-y",
+        "some-search-mcp"
+      ],
+      "URL": "",
+      "Env": {
+        "SEARCH_KEY": "${{ secrets.SEARCH_KEY }}"
+      },
+      "Headers": null
+    }
+  ]
+}

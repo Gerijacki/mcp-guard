@@ -8,8 +8,12 @@ import (
 )
 
 var (
-	// server.tool("name", ...) and server.registerTool("name", {...}, handler)
-	tsToolRe = regexp.MustCompile(`\.\s*(?:tool|registerTool)\s*\(`)
+	// server.tool("name", ...), server.registerTool("name", {...}, handler), and the resource
+	// and prompt variants of both.
+	tsToolRe = regexp.MustCompile(`\.\s*(tool|registerTool|resource|registerResource|prompt|registerPrompt)\s*\(`)
+	// fastmcp (punkpeye): server.addTool({ name, description, parameters, execute })
+	tsAddToolRe = regexp.MustCompile(`\.\s*addTool\s*\(\s*\{`)
+	tsExecuteRe = regexp.MustCompile(`\bexecute\s*(?::|\()`)
 	// server.setRequestHandler(CallToolRequestSchema, async (request) => {...})
 	tsCallHandlerRe = regexp.MustCompile(`setRequestHandler\s*\(\s*CallToolRequestSchema\s*,`)
 	// { name: "x", description: "...", inputSchema: {...} } objects (list_tools style)
@@ -22,7 +26,15 @@ func extractTypeScript(f *source.File) []source.Tool {
 	s := f.Code()
 	var tools []source.Tool
 
-	for _, m := range tsToolRe.FindAllStringIndex(s, -1) {
+	for _, m := range tsToolRe.FindAllStringSubmatchIndex(f.Skeleton(), -1) {
+		kind := ""
+		switch s[m[2]:m[3]] {
+		case "resource", "registerResource":
+			kind = "resource"
+		case "prompt", "registerPrompt":
+			kind = "prompt"
+		}
+		m = []int{m[0], m[1]}
 		open := m[1] - 1
 		close := source.MatchClose(s, open, source.TypeScript)
 		if close < 0 {
@@ -36,11 +48,11 @@ func extractTypeScript(f *source.File) []source.Tool {
 		if !ok {
 			continue
 		}
-		t := source.Tool{Name: name, Line: f.LineAt(m[0])}
+		t := source.Tool{Name: name, Line: f.LineAt(m[0]), Kind: kind, Receiver: tsReceiver(s, m[0])}
 		last := args[len(args)-1]
 		mid := s[args[0].End:last.Start]
 		midStart := args[0].End
-		if len(args) >= 3 {
+		if len(args) >= 3 && kind != "resource" { // a resource's second argument is its URI, not a description
 			if d, end, ok := source.ParseStringLiteral(s, args[1].Start, source.TypeScript); ok && source.SkipSpace(s, end) >= args[1].End {
 				t.Description, t.DescriptionLine = d, f.LineAt(source.SkipSpace(s, args[1].Start))
 			}
@@ -50,7 +62,15 @@ func extractTypeScript(f *source.File) []source.Tool {
 				t.Description, t.DescriptionLine = d, f.LineAt(midStart+off)
 			}
 		}
+		// server.tool("x", DESCRIPTION, schema, handler): the second argument is not a literal.
+		if t.Description == "" && len(args) >= 3 && kind != "resource" && !strings.HasPrefix(strings.TrimSpace(args[1].Text(s)), "{") {
+			t.DescriptionDynamic = true
+		}
+		if t.Description == "" && hasKey(mid, "description") {
+			t.DescriptionDynamic = true
+		}
 		t.Annotations = parseHints(mid)
+		t.FixedParams = tsFixedParams(mid)
 		t.ParamDescriptions = allStrings(mid, tsDescribeRe, source.TypeScript)
 		if params, from, to, ok := tsHandler(f, last.Start, last.End); ok {
 			t.Params = params
@@ -66,7 +86,36 @@ func extractTypeScript(f *source.File) []source.Tool {
 		tools = append(tools, t)
 	}
 
-	for _, m := range tsCallHandlerRe.FindAllStringIndex(s, -1) {
+	for _, m := range tsAddToolRe.FindAllStringIndex(f.Skeleton(), -1) {
+		open := m[1] - 1 // the "{" of the options object
+		close := source.MatchClose(s, open, source.TypeScript)
+		if close < 0 {
+			continue
+		}
+		obj := s[open : close+1]
+		name, _, ok := keyString(obj, "name", source.TypeScript)
+		if !ok || hasTool(tools, name) {
+			continue
+		}
+		t := source.Tool{Name: name, Line: f.LineAt(m[0]), Annotations: parseHints(obj), ParamDescriptions: allStrings(obj, tsDescribeRe, source.TypeScript)}
+		if d, off, ok := keyString(obj, "description", source.TypeScript); ok {
+			t.Description, t.DescriptionLine = d, f.LineAt(open+off)
+		}
+		t.DescriptionDynamic = t.Description == "" && hasKey(obj, "description")
+		if loc := tsExecuteRe.FindStringIndex(obj); loc != nil {
+			start := open + loc[1]
+			if obj[loc[1]-1] == '(' {
+				start-- // method shorthand: execute(args) { ... }
+			}
+			if params, from, to, ok := tsHandler(f, start, close); ok {
+				t.Params = params
+				f.SetBody(&t, from, to)
+			}
+		}
+		tools = append(tools, t)
+	}
+
+	for _, m := range tsCallHandlerRe.FindAllStringIndex(f.Skeleton(), -1) {
 		open := m[0] + strings.IndexByte(s[m[0]:m[1]], '(')
 		close := source.MatchClose(s, open, source.TypeScript)
 		if close < 0 {
@@ -102,13 +151,35 @@ func extractTypeScript(f *source.File) []source.Tool {
 		if !strings.Contains(seg, "inputSchema") && !strings.Contains(seg, "input_schema") {
 			continue
 		}
-		t := source.Tool{Name: name, Line: f.LineAt(m[0]), Annotations: parseHints(seg)}
+		t := source.Tool{Name: name, Line: f.LineAt(m[0]), Annotations: parseHints(seg),
+			ParamDescriptions: schemaDescriptions(seg, source.TypeScript)}
 		if d, off, ok := keyString(seg, "description", source.TypeScript); ok {
 			t.Description, t.DescriptionLine = d, f.LineAt(m[1]+off)
 		}
+		t.DescriptionDynamic = t.Description == "" && hasKey(seg, "description")
 		tools = append(tools, t)
 	}
 	return tools
+}
+
+var tsFixedRe = regexp.MustCompile(`([A-Za-z_$][\w$]*)\s*:\s*z\s*\.\s*(?:coerce\s*\.\s*)?(?:number|boolean|bigint|enum|nativeEnum|literal|int)\b`)
+
+// tsFixedParams returns the keys of a zod schema declared as numbers, booleans, enums or literals.
+func tsFixedParams(schema string) []string {
+	var out []string
+	for _, m := range tsFixedRe.FindAllStringSubmatch(schema, -1) {
+		out = append(out, m[1])
+	}
+	return out
+}
+
+// tsReceiver returns the identifier chain just before the "." at dot ("server", "this.server").
+func tsReceiver(s string, dot int) string {
+	i := dot
+	for i > 0 && (isIdentByte(s[i-1]) || s[i-1] == '.' || s[i-1] == '?' || s[i-1] == '!') {
+		i--
+	}
+	return strings.TrimRight(s[i:dot], ".?!")
 }
 
 // tsHandler parses a function expression in s[off:limit] (arrow function, function
@@ -177,7 +248,7 @@ func tsHandler(f *source.File, off, limit int) ([]string, int, int, bool) {
 // tsResolveFunc finds the declaration of a named handler function in the file.
 func tsResolveFunc(s, name string) (int, bool) {
 	q := regexp.QuoteMeta(name)
-	re := regexp.MustCompile(strings.ReplaceAll(tsFuncDeclRe, "%s", q))
+	re := cachedRegexp(strings.ReplaceAll(tsFuncDeclRe, "%s", q))
 	loc := re.FindStringIndex(s)
 	if loc == nil {
 		return 0, false

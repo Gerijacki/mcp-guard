@@ -1,0 +1,11 @@
+{
+  "mcpServers": {
+    "search": {
+      "command": "npx",
+      "args": ["-y", "some-search-mcp", "--api-key", "${env:SEARCH_API_KEY}", "--token-limit", "4096"]
+    },
+    "remote": {
+      "url": "https://mcp.vendor.dev/sse?region=eu-west-1&format=json"
+    }
+  }
+}

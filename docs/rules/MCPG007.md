@@ -35,6 +35,8 @@ Variants include instructions hidden with **invisible Unicode** (zero-width, bid
 
 All problems in one description are combined into a single finding.
 
+What is analyzed: the description, the parameter descriptions (including descriptions nested in a raw `inputSchema` JSON-Schema literal, the classic hiding place) and invisible Unicode: zero-width and bidirectional controls, tag characters, variation selectors and filler characters. Hidden HTML comments and long encoded blobs in a description are reported as medium. "Silently/secretly/covertly read/send/…" and "without the user's knowledge" are medium. Plain workflow guidance such as "call `list_tables` first" or "posts to the webhook URL" is not reported. In code files, bidirectional control characters anywhere in the source ([Trojan Source](https://trojansource.codes/)) are reported as high. To catch a description that *changes* after review, use [MCPG016](MCPG016.md).
+
 ## Fix
 
 Keep descriptions short, factual and meant for humans too: what the tool does, its inputs and its side effects. Remove directives aimed at the model and references to unrelated files or tools, and strip invisible characters. When you *install* third-party servers, scan them with mcp-guard and pin their versions, since a description can change in any update ("rug pull").

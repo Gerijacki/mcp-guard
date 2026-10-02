@@ -75,6 +75,22 @@ func (f *Finding) ComputeFingerprint() {
 	f.Fingerprint = hex.EncodeToString(h.Sum(nil))[:32]
 }
 
+// NumberDuplicates gives findings that share a fingerprint (the same issue repeated on
+// similar lines of one file) distinct fingerprints: the first keeps its value, later ones
+// are hashed with their occurrence index. fs must already be sorted.
+func NumberDuplicates(fs []Finding) {
+	seen := map[string]int{}
+	for i := range fs {
+		base := fs[i].Fingerprint
+		n := seen[base]
+		seen[base] = n + 1
+		if n > 0 {
+			sum := sha256.Sum256([]byte(fmt.Sprintf("%s#%d", base, n)))
+			fs[i].Fingerprint = hex.EncodeToString(sum[:])[:32]
+		}
+	}
+}
+
 // Sort orders findings by severity (most severe first), then file, line and rule.
 func Sort(fs []Finding) {
 	sort.SliceStable(fs, func(i, j int) bool {

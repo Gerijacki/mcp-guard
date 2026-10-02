@@ -1,0 +1,83 @@
+{
+  "tools": [
+    {
+      "name": "read_file",
+      "line": 9,
+      "params": [
+        "path"
+      ],
+      "description": "Read a file from disk",
+      "param_descriptions": [
+        "Path of the file"
+      ],
+      "body_lines": [
+        13,
+        16
+      ]
+    },
+    {
+      "name": "delete_file",
+      "line": 19,
+      "params": [
+        "filePath"
+      ],
+      "description": "Delete a file",
+      "annotations": {
+        "destructivehint": "true"
+      },
+      "body_lines": [
+        27,
+        30
+      ]
+    },
+    {
+      "name": "echo",
+      "line": 37,
+      "params": [
+        "args"
+      ],
+      "body_lines": [
+        33,
+        34
+      ]
+    },
+    {
+      "name": "CallToolRequestSchema handler",
+      "line": 51,
+      "params": [
+        "request"
+      ],
+      "body_lines": [
+        51,
+        53
+      ],
+      "dispatcher": true
+    },
+    {
+      "name": "demo",
+      "line": 7,
+      "params": [],
+      "description": "Delete a file",
+      "annotations": {
+        "destructivehint": "true"
+      },
+      "body_lines": [
+        0,
+        0
+      ]
+    },
+    {
+      "name": "search",
+      "line": 43,
+      "params": [],
+      "description": "Search the web",
+      "body_lines": [
+        0,
+        0
+      ]
+    }
+  ],
+  "functions": [
+    "handleEcho(args)"
+  ]
+}

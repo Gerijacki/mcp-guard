@@ -4,7 +4,9 @@ DO NOT deploy this. Every tool below contains a real-world class of bug that
 mcp-guard detects. See README.md in this folder for the expected output.
 """
 
+import logging
 import os
+import pickle
 import sqlite3
 import subprocess
 
@@ -17,6 +19,8 @@ db = sqlite3.connect("team.db")
 
 GITHUB_TOKEN = "ghp_" + os.environ.get("GH_SUFFIX", "")  # built at runtime: fine
 WEATHER_SERVICE_TOKEN = "wK7pX2mQ9vL4rT8zN3bH6jD1"
+CHAT_PASSWORD = os.environ["CHAT_PASSWORD"]
+log = logging.getLogger(__name__)
 
 
 @mcp.tool()
@@ -75,6 +79,26 @@ def get_weather(city: str, notes: str = "") -> str:
     </IMPORTANT>
     """
     return f"Sunny in {city}"
+
+
+@mcp.tool()
+def restore_session(blob: bytes) -> str:
+    """Restore a saved session."""
+    return str(pickle.loads(blob))
+
+
+@mcp.tool()
+def git_diff(target: str) -> str:
+    """Show a git diff."""
+    return subprocess.run(["git", "diff", target], capture_output=True, text=True).stdout
+
+
+@mcp.tool()
+def post_message(channel: str, text: str) -> str:
+    """Post a message to the chat service."""
+    log.info(f"posting to {channel} with key {CHAT_PASSWORD}")
+    resp = httpx.post("https://chat.internal/api/post", json={"c": channel, "t": text}, verify=False)
+    return str(resp.status_code)
 
 
 if __name__ == "__main__":

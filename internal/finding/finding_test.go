@@ -72,3 +72,32 @@ func TestSortAndCount(t *testing.T) {
 		t.Errorf("counts = %v", counts)
 	}
 }
+
+func TestNumberDuplicatesGivesRepeatedFindingsDistinctFingerprints(t *testing.T) {
+	mk := func(snippet string) Finding {
+		f := Finding{RuleID: "MCPG004", File: "a.py", Tool: "run", Snippet: snippet, Message: "m"}
+		f.ComputeFingerprint()
+		return f
+	}
+	fs := []Finding{mk("os.system(a)"), mk("os.system(a)"), mk("other()"), mk("os.system(a)")}
+	first := fs[0].Fingerprint
+	NumberDuplicates(fs)
+	if fs[0].Fingerprint != first {
+		t.Error("the first occurrence must keep its fingerprint (stable baselines)")
+	}
+	seen := map[string]bool{}
+	for _, f := range fs {
+		if seen[f.Fingerprint] {
+			t.Errorf("duplicate fingerprint %s", f.Fingerprint)
+		}
+		seen[f.Fingerprint] = true
+	}
+	if len(seen) != 4 {
+		t.Errorf("distinct = %d", len(seen))
+	}
+	again := []Finding{mk("os.system(a)"), mk("os.system(a)")}
+	NumberDuplicates(again)
+	if again[1].Fingerprint != fs[1].Fingerprint {
+		t.Error("occurrence fingerprints must be deterministic")
+	}
+}

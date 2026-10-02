@@ -32,4 +32,6 @@ app.post("/mcp", requireBearerAuth({ verifier }), handler);
 
 ## How it is detected
 
+A comment such as `# TODO: add auth` is not authentication. Separately, a TypeScript server that allows any web origin (`cors()` with no options, `Access-Control-Allow-Origin: *`) without authentication or an Origin/Host allowlist (`allowedHosts`, `enableDnsRebindingProtection`) is reported, because any page the user visits can then call its tools. The Python and Go SDKs validate the Origin header themselves, so the wildcard is not reported there.
+
 Files that use an HTTP/SSE MCP transport, bind to all interfaces, and contain no sign of authentication (`auth`, `bearer`, `api_key`, `jwt`, `oauth`, `TokenVerifier`, `requireAuth`, …). Because auth is often configured in another file, this rule is medium severity; suppress it with `mcp-guard:ignore MCPG008` when a reverse proxy handles authentication.

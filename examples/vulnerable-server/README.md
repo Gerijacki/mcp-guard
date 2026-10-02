@@ -13,9 +13,20 @@
 | `purge_channel` | `destructiveHint: true` with no confirmation or limit | MCPG006 |
 | `get_weather` | `<IMPORTANT>` block telling the model to leak `~/.ssh/id_rsa` | MCPG007 |
 | `FastMCP(host="0.0.0.0")` | HTTP transport on all interfaces with no auth | MCPG008 |
+| `summarize_url` | The model chooses the URL the server fetches (and redirects are followed) | MCPG009 |
+| `restore_session` | `pickle.loads` of model-supplied bytes | MCPG010 |
+| `mcp.json` | `npx -y some-postgres-mcp` without a pinned version | MCPG011 |
+| `git_diff` | Model value in `git diff` argv without `--` | MCPG012 |
+| `post_message` | Logs `CHAT_PASSWORD` | MCPG013 |
+| `post_message` | `verify=False` | MCPG014 |
+| `proxy.py: list_repos` (registered twice) | The second registration silently shadows the first | MCPG017 |
+| `proxy.py: list_repos` | Forwards the client's `Authorization` header to GitHub | MCPG015 |
 
 ```sh
 mcp-guard scan examples/vulnerable-server
 ```
 
 The credentials in this folder are fake and were never valid.
+
+MCPG016 needs a lock file: run `mcp-guard lock examples/vulnerable-server`, edit a tool description, then
+`mcp-guard scan examples/vulnerable-server --lock examples/vulnerable-server/mcp-guard.lock`.

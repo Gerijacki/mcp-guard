@@ -9,11 +9,12 @@ import (
 
 var (
 	// s.AddTool(tool, handler) (mark3labs/mcp-go) and mcp.AddTool(server, tool, handler) (go-sdk)
-	goAddToolRe = regexp.MustCompile(`\bAddTool\s*(?:\[[^\]]*\])?\s*\(`)
-	// mcp.NewTool("name", ...) and &mcp.Tool{Name: ...}
-	goNewToolRe    = regexp.MustCompile(`\bNewTool\s*\(`)
-	goToolLitRe    = regexp.MustCompile(`\bmcp\.Tool\s*\{`)
-	goWithDescRe   = regexp.MustCompile(`\bWithDescription\s*\(`)
+	// plus AddPrompt / AddResource / AddResourceTemplate for the other MCP primitives.
+	goAddToolRe = regexp.MustCompile(`\bAdd(Tool|Prompt|ResourceTemplate|Resource)\s*(?:\[[^\]]*\])?\s*\(`)
+	// mcp.NewTool("name", ...) and &mcp.Tool{Name: ...}; NewPrompt/NewResource and literals likewise.
+	goNewToolRe    = regexp.MustCompile(`\bNew(?:Tool|Prompt|ResourceTemplate|Resource)\s*\(`)
+	goToolLitRe    = regexp.MustCompile(`\bmcp\.(?:Tool|Prompt|Resource|ResourceTemplate)\s*\{`)
+	goWithDescRe   = regexp.MustCompile(`\bWith(?:Prompt|Resource|ResourceTemplate)?Description\s*\(`)
 	goParamDescRe  = regexp.MustCompile(`\bDescription\s*\(`)
 	goFuncLitRe    = regexp.MustCompile(`^func\s*\(`)
 	goFuncDeclTmpl = `\bfunc\s+(?:\([^)]*\)\s*)?%s\s*(?:\[[^\]]*\])?\s*\(`
@@ -24,7 +25,18 @@ func extractGo(f *source.File) []source.Tool {
 	var tools []source.Tool
 	consumed := map[int]bool{} // start offsets of tool definitions already paired with a handler
 
-	for _, m := range goAddToolRe.FindAllStringIndex(s, -1) {
+	for _, m := range goAddToolRe.FindAllStringSubmatchIndex(f.Skeleton(), -1) {
+		kind := ""
+		switch s[m[2]:m[3]] {
+		case "Prompt":
+			kind = "prompt"
+		case "Resource", "ResourceTemplate":
+			kind = "resource"
+		}
+		m = []int{m[0], m[1]}
+		if goDeclaresMethod(s, m[0]) {
+			continue // `func (s *Server) AddTool(t *Tool, h Handler)` defines the API, it registers nothing
+		}
 		open := m[1] - 1
 		close := source.MatchClose(s, open, source.Go)
 		if close < 0 {
@@ -35,7 +47,10 @@ func extractGo(f *source.File) []source.Tool {
 			continue
 		}
 		toolArg, handlerArg := args[len(args)-2], args[len(args)-1]
-		t := source.Tool{Line: f.LineAt(m[0]), Annotations: map[string]string{}}
+		if goParamDeclRe.MatchString(strings.TrimSpace(toolArg.Text(s))) {
+			continue // an interface method or declaration: "t *Tool"
+		}
+		t := source.Tool{Line: f.LineAt(m[0]), Annotations: map[string]string{}, Kind: kind, Receiver: goReceiver(s, m[0], args)}
 		if defStart, defEnd, ok := goResolveToolDef(s, toolArg); ok {
 			consumed[defStart] = true
 			goParseToolDef(f, &t, defStart, defEnd)
@@ -52,7 +67,7 @@ func extractGo(f *source.File) []source.Tool {
 	}
 
 	// Tool definitions that were never passed to AddTool in this file: keep the metadata.
-	defs := append(goNewToolRe.FindAllStringIndex(s, -1), goToolLitRe.FindAllStringIndex(s, -1)...)
+	defs := append(goNewToolRe.FindAllStringIndex(f.Skeleton(), -1), goToolLitRe.FindAllStringIndex(f.Skeleton(), -1)...)
 	for _, m := range defs {
 		start := goDefStart(s, m[0])
 		if consumed[start] {
@@ -63,12 +78,45 @@ func extractGo(f *source.File) []source.Tool {
 			continue
 		}
 		t := source.Tool{Line: f.LineAt(start), Annotations: map[string]string{}}
+		switch lit := s[m[0]:m[1]]; {
+		case strings.Contains(lit, "Prompt"):
+			t.Kind = "prompt"
+		case strings.Contains(lit, "Resource"):
+			t.Kind = "resource"
+		}
 		goParseToolDef(f, &t, start, end)
 		if t.Name != "" && !hasTool(tools, t.Name) {
 			tools = append(tools, t)
 		}
 	}
 	return tools
+}
+
+// goReceiver names the server of an AddTool call: "s" in s.AddTool(...), or the first argument
+// of mcp.AddTool(server, ...).
+func goReceiver(s string, at int, args []source.Segment) string {
+	if at > 0 && s[at-1] == '.' {
+		i := at - 1
+		for i > 0 && (isIdentByte(s[i-1]) || s[i-1] == '.') {
+			i--
+		}
+		if recv := s[i : at-1]; recv != "mcp" && recv != "" {
+			return recv
+		}
+	}
+	if len(args) >= 3 { // AddTool(server, tool, handler)
+		return strings.TrimSpace(args[0].Text(s))
+	}
+	return ""
+}
+
+var goParamDeclRe = regexp.MustCompile(`^[A-Za-z_]\w*\s+(?:\*|\[\]|\.\.\.)*[A-Za-z_][\w.]*(?:\[[^\]]*\])?$`)
+
+// goDeclaresMethod reports whether the call-looking text at i is a func declaration
+// ("func (s *Server) AddTool(...)") rather than a call.
+func goDeclaresMethod(s string, i int) bool {
+	start := strings.LastIndexByte(s[:i], '\n') + 1
+	return strings.HasPrefix(strings.TrimLeft(s[start:i], " \t"), "func ")
 }
 
 // goDefStart widens a NewTool/Tool{ match to include a package qualifier and '&'.
@@ -100,7 +148,7 @@ func goResolveToolDef(s string, arg source.Segment) (int, int, bool) {
 	if !isIdent(name) {
 		return 0, 0, false
 	}
-	assign := regexp.MustCompile(`\b` + regexp.QuoteMeta(name) + `\s*:?=\s*`)
+	assign := cachedRegexp(`\b` + regexp.QuoteMeta(name) + `\s*:?=\s*`)
 	for _, a := range assign.FindAllStringIndex(s, -1) {
 		rest := s[a[1]:min(len(s), a[1]+64)]
 		for _, re := range []*regexp.Regexp{goNewToolRe, goToolLitRe} {
@@ -119,7 +167,14 @@ func goParseToolDef(f *source.File, t *source.Tool, start, end int) {
 	s := f.Code()
 	def := s[start : end+1]
 	if loc := goNewToolRe.FindStringIndex(def); loc != nil {
-		if v, _, ok := source.ParseStringLiteral(def, loc[1], source.Go); ok {
+		if strings.Contains(def[loc[0]:loc[1]], "NewResource") {
+			// NewResource(uri, name, ...): the second argument names the resource.
+			if args := source.SplitArgs(def, loc[1], source.MatchClose(def, loc[1]-1, source.Go), source.Go); len(args) > 1 {
+				if v, _, ok := source.ParseStringLiteral(def, args[1].Start, source.Go); ok {
+					t.Name = v
+				}
+			}
+		} else if v, _, ok := source.ParseStringLiteral(def, loc[1], source.Go); ok {
 			t.Name = v
 		}
 	} else if v, _, ok := keyString(def, "Name", source.Go); ok {
@@ -132,6 +187,7 @@ func goParseToolDef(f *source.File, t *source.Tool, start, end int) {
 	} else if v, off, ok := keyString(def, "Description", source.Go); ok {
 		t.Description, t.DescriptionLine = v, f.LineAt(start+off)
 	}
+	t.DescriptionDynamic = t.Description == "" && (goWithDescRe.MatchString(def) || hasKey(def, "Description"))
 	t.ParamDescriptions = allStrings(def, goParamDescRe, source.Go)
 	for k, v := range parseHints(def) {
 		t.Annotations[k] = v
@@ -149,7 +205,7 @@ func goHandler(f *source.File, arg source.Segment) ([]string, int, int, bool) {
 	}
 	ids := source.Identifiers(text)
 	for i := len(ids) - 1; i >= 0; i-- {
-		re := regexp.MustCompile(strings.ReplaceAll(goFuncDeclTmpl, "%s", regexp.QuoteMeta(ids[i])))
+		re := cachedRegexp(strings.ReplaceAll(goFuncDeclTmpl, "%s", regexp.QuoteMeta(ids[i])))
 		if loc := re.FindStringIndex(s); loc != nil {
 			return goFuncAt(f, loc[1]-1)
 		}

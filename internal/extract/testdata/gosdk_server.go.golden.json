@@ -1,0 +1,20 @@
+{
+  "tools": [
+    {
+      "name": "greet",
+      "line": 19,
+      "params": [
+        "req",
+        "args"
+      ],
+      "description": "Say hi",
+      "body_lines": [
+        13,
+        14
+      ]
+    }
+  ],
+  "functions": [
+    "Greet(req,args)"
+  ]
+}

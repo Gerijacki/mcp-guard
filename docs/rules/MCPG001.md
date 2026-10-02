@@ -47,4 +47,11 @@ f, err := root.Create(name)
 
 Inside each tool handler, values derived from tool parameters are followed through assignments to filesystem sinks (`open(..., "w")`, `os.remove`, `shutil.rmtree`, `fs.writeFile`, `fs.unlink`, `os.WriteFile`, `os.ReadFile`, …). The finding is dropped when the handler contains a containment check such as `is_relative_to`, `commonpath`, `startswith`/`startsWith`, `path.relative`, `filepath.IsLocal`, `filepath.Rel`, `os.OpenRoot`, `secure_filename` or a helper named like `safe_path`/`validate_path`.
 
-**Limitations:** a check done in another function that the handler calls is only recognized if its name matches the patterns above.
+Details that keep it precise:
+
+- The evidence is looked up in the handler's code only: a comment or docstring saying "validates the path" does not count.
+- A `startswith` / `startsWith` / `HasPrefix` check only counts when the value was normalized first (`resolve`, `realpath`, `abspath`, `filepath.Clean`…) and the check mentions the tainted value: `"/srv/data/../../etc/passwd".startswith("/srv/data")` is true.
+- Idioms that reduce a value to a harmless component are sanitizers: `os.path.basename`, `Path(p).name`, `filepath.Base`, `secure_filename`, `filepath.Clean("/" + p)`.
+- A clean reassignment (`path = "/srv/default.txt"`) at the top level of the handler clears the taint.
+- When the tool hands the value to a helper function (same file, or another file when the call is unambiguous), the helper is analyzed with that value tainted and the finding is reported at the real sink (`tool (via helper)`). Checks done in the caller protect the helper.
+- Your own helpers can be declared in `.mcp-guard.yaml` under `extend:` (see [custom rules](../custom-rules.md)).

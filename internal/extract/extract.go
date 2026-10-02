@@ -23,8 +23,11 @@ func Extract(f *source.File) {
 		f.Tools = extractTypeScript(f)
 	case source.Go:
 		f.Tools = extractGo(f)
-	case source.JSON:
+	case source.JSON, source.YAML, source.TOML:
 		extractConfig(f)
+	}
+	if f.Language.IsCode() {
+		extractFuncs(f)
 	}
 }
 
@@ -33,7 +36,7 @@ func Extract(f *source.File) {
 //	destructiveHint=True            (Python)
 //	destructiveHint: true           (TypeScript)
 //	mcp.WithDestructiveHintAnnotation(true), DestructiveHint: mcp.ToBoolPtr(true)  (Go)
-var hintRe = regexp.MustCompile(`(?i)\b(?:With)?(destructive|readOnly|idempotent|openWorld)Hint(?:Annotation)?\s*[:=(]\s*(?:[\w.]+\(\s*)?&?\s*(true|false)\b`)
+var hintRe = regexp.MustCompile(`(?i)\b(?:With)?(destructive|readOnly|idempotent|openWorld)Hint(?:Annotation)?["']?\s*[:=(]\s*(?:[\w.]+\(\s*)?&?\s*(true|false)\b`)
 
 func parseHints(text string) map[string]string {
 	out := map[string]string{}
@@ -54,15 +57,24 @@ func keyString(text, key string, lang source.Language) (string, int, bool) {
 	return "", 0, false
 }
 
-var keyRes sync.Map // key -> *regexp.Regexp
+var regexCache sync.Map // pattern -> *regexp.Regexp
 
-func keyRe(key string) *regexp.Regexp {
-	if re, ok := keyRes.Load(key); ok {
+// cachedRegexp compiles pattern once. Extractors build patterns around names found in the
+// scanned code; doing that per tool or per identifier is measurable on large trees.
+func cachedRegexp(pattern string) *regexp.Regexp {
+	if re, ok := regexCache.Load(pattern); ok {
 		return re.(*regexp.Regexp)
 	}
-	re := regexp.MustCompile(`\b` + regexp.QuoteMeta(key) + `["']?\s*[:=]\s*`)
-	keyRes.Store(key, re)
+	re := regexp.MustCompile(pattern)
+	regexCache.Store(pattern, re)
 	return re
+}
+
+// hasKey reports whether text assigns or declares key at all, whatever its value.
+func hasKey(text, key string) bool { return keyRe(key).MatchString(text) }
+
+func keyRe(key string) *regexp.Regexp {
+	return cachedRegexp(`\b` + regexp.QuoteMeta(key) + `["']?\s*[:=]\s*`)
 }
 
 // allStrings returns every string literal that follows a match of re in text.
@@ -74,6 +86,21 @@ func allStrings(text string, re *regexp.Regexp, lang source.Language) []string {
 		}
 	}
 	return out
+}
+
+var schemaDescRe = regexp.MustCompile(`["']?description["']?\s*:\s*`)
+
+// schemaDescriptions returns the "description" strings nested in a raw JSON-Schema literal
+// (the inputSchema of a tool definition). They reach the model like any other description.
+func schemaDescriptions(text string, lang source.Language) []string {
+	i := strings.Index(text, "inputSchema")
+	if i < 0 {
+		i = strings.Index(text, "input_schema")
+	}
+	if i < 0 {
+		return nil
+	}
+	return allStrings(text[i:], schemaDescRe, lang)
 }
 
 func hasTool(tools []source.Tool, name string) bool {

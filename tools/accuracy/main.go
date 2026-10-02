@@ -17,6 +17,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"sort"
 	"strings"
 
@@ -28,14 +29,52 @@ import (
 )
 
 type corpus struct {
-	Repos []repo `yaml:"repos"`
+	// MinPrecision is the lowest per-rule precision (tp / (tp+fp) over the labelled
+	// findings of all repositories) CI accepts. Default 0.9.
+	MinPrecision float64 `yaml:"min-precision,omitempty"`
+	Repos        []repo  `yaml:"repos"`
 }
 
 type repo struct {
 	Name   string `yaml:"name"`
 	Commit string `yaml:"commit"`
 	Expect counts `yaml:"expect"`
+	// Labels is the ground truth for every finding: a human decided whether it is a real
+	// problem (tp) or a false positive (fp). The counts above only detect change; labels
+	// are what makes precision measurable.
+	Labels []label `yaml:"labels,omitempty"`
+	// KnownGaps are vulnerabilities we know exist but the scanner misses (false negatives).
+	// If one starts being reported, the run fails so it is moved into Labels as a tp.
+	KnownGaps []gap `yaml:"known-gaps,omitempty"`
 }
+
+// label classifies one finding. Findings are matched on rule, file and tool, not on the
+// line number, so the entry survives unrelated edits.
+type label struct {
+	Rule  string `yaml:"rule"`
+	File  string `yaml:"file"`
+	Tool  string `yaml:"tool,omitempty"`
+	Label string `yaml:"label"` // tp | fp | todo (written by -update, must be reviewed)
+	Note  string `yaml:"note,omitempty"`
+}
+
+type gap struct {
+	Rule string `yaml:"rule"`
+	File string `yaml:"file"`
+	Tool string `yaml:"tool,omitempty"`
+	Why  string `yaml:"why"`
+}
+
+// found is one scanner finding in a repository.
+type found struct {
+	Rule, File, Tool string
+	Line             int
+	Message          string
+}
+
+func (f found) key() string { return f.Rule + "|" + f.File + "|" + f.Tool }
+func (l label) key() string { return l.Rule + "|" + l.File + "|" + l.Tool }
+func (g gap) key() string   { return g.Rule + "|" + g.File + "|" + g.Tool }
 
 type counts struct {
 	Tools    int            `yaml:"tools"`
@@ -49,6 +88,10 @@ const header = `# Real-world accuracy benchmark. Run with: go run ./tools/accura
 # expected to find there with default settings (tests skipped, min severity low).
 # A change in any number fails CI: if the change is an intended improvement, review
 # the new findings and refresh the expectations with: go run ./tools/accuracy -update
+#
+# Every finding must be labelled tp (real problem) or fp (false positive) with a note;
+# -update adds new findings as "todo" and fails until a human reviews them. CI gates the
+# per-rule precision on these labels. known-gaps lists real vulnerabilities we miss.
 `
 
 // latestToolRatio is the share of the pinned tool count that the default branch must
@@ -86,6 +129,11 @@ func run(corpusPath, workdir string, latest, update bool, summaryPath string) er
 	}
 	fmt.Fprintf(&report, "## mcp-guard accuracy benchmark: %s\n\n| Repository | Tools | Configs | Findings | Status |\n|---|---|---|---|---|\n", mode)
 
+	minPrecision := c.MinPrecision
+	if minPrecision == 0 {
+		minPrecision = 0.9
+	}
+	prec := tally{}
 	var failures []string
 	for i := range c.Repos {
 		r := &c.Repos[i]
@@ -97,7 +145,7 @@ func run(corpusPath, workdir string, latest, update bool, summaryPath string) er
 		if err := checkout(dir, "https://github.com/"+r.Name+".git", ref); err != nil {
 			return fmt.Errorf("%s: %w", r.Name, err)
 		}
-		got, details, err := scan(dir)
+		got, all, err := scan(dir)
 		if err != nil {
 			return fmt.Errorf("%s: %w", r.Name, err)
 		}
@@ -117,13 +165,26 @@ func run(corpusPath, workdir string, latest, update bool, summaryPath string) er
 		default:
 			if !equal(got, r.Expect) {
 				status = "FAIL"
-				failures = append(failures, fmt.Sprintf("%s: expected %s, got %s\n%s", r.Name, describe(r.Expect), describe(got), details))
+				failures = append(failures, fmt.Sprintf("%s: expected %s, got %s\n%s", r.Name, describe(r.Expect), describe(got), listing(all)))
+			}
+		}
+		if !latest {
+			if problems := reconcile(r, all, prec, update); len(problems) > 0 {
+				status = "FAIL: labels"
+				failures = append(failures, problems...)
 			}
 		}
 		fmt.Fprintf(&report, "| [%s](https://github.com/%s) | %d | %d | %s | %s |\n", r.Name, r.Name, got.Tools, got.Configs, findingsText(got.Findings), status)
 		fmt.Printf("%-36s tools=%-4d configs=%-2d findings=%-28s %s\n", r.Name, got.Tools, got.Configs, findingsText(got.Findings), status)
 	}
 
+	if !latest {
+		text, bad := precisionReport(prec, minPrecision)
+		report.WriteString(text)
+		if !update {
+			failures = append(failures, bad...)
+		}
+	}
 	if summaryPath != "" {
 		if err := appendFile(summaryPath, report.String()); err != nil {
 			return err
@@ -134,7 +195,17 @@ func run(corpusPath, workdir string, latest, update bool, summaryPath string) er
 		if err != nil {
 			return err
 		}
-		return os.WriteFile(corpusPath, append([]byte(header), out...), 0o644)
+		if err := os.WriteFile(corpusPath, append([]byte(header), out...), 0o644); err != nil {
+			return err
+		}
+		for _, r := range c.Repos {
+			for _, l := range r.Labels {
+				if l.Label == "todo" {
+					return fmt.Errorf("%s: new finding %s %s written as \"todo\": review it and set label to tp or fp (with a note) before committing", r.Name, l.Rule, l.File)
+				}
+			}
+		}
+		return nil
 	}
 	if len(failures) > 0 {
 		return errors.New("accuracy regression:\n" + strings.Join(failures, "\n"))
@@ -155,10 +226,23 @@ func checkout(dir, url, ref string) error {
 			return err
 		}
 	}
+	// A pinned commit that is already present needs no network round trip.
+	if shaRe.MatchString(ref) && gitQuiet(dir, "cat-file", "-e", ref+"^{commit}") == nil {
+		return git(dir, "checkout", "-q", "--force", ref)
+	}
 	if err := git(dir, "fetch", "-q", "--depth", "1", "origin", ref); err != nil {
 		return err
 	}
 	return git(dir, "checkout", "-q", "--force", "FETCH_HEAD")
+}
+
+var shaRe = regexp.MustCompile(`^[0-9a-f]{40}$`)
+
+// gitQuiet runs git and discards all output; only the exit status matters.
+func gitQuiet(dir string, args ...string) error {
+	cmd := exec.Command("git", append([]string{"-C", dir}, args...)...)
+	cmd.Stdout, cmd.Stderr = io.Discard, io.Discard
+	return cmd.Run()
 }
 
 func git(dir string, args ...string) error {
@@ -169,19 +253,113 @@ func git(dir string, args ...string) error {
 
 // scan runs mcp-guard with the CLI defaults and returns the counts plus a listing of the
 // findings for failure messages.
-func scan(dir string) (counts, string, error) {
+func scan(dir string) (counts, []found, error) {
 	res, err := scanner.Scan(scanner.Options{Root: dir, Rules: rules.Builtin(), MinSeverity: finding.Low})
 	if err != nil {
-		return counts{}, "", err
+		return counts{}, nil, err
 	}
 	c := counts{Tools: res.ToolsFound, Configs: res.ConfigsFound, Findings: map[string]int{}}
-	var lines []string
+	var all []found
 	for _, f := range res.Findings {
 		c.Findings[f.RuleID]++
 		rel, _ := filepath.Rel(dir, filepath.FromSlash(f.File))
-		lines = append(lines, fmt.Sprintf("    %s %s:%d %s", f.RuleID, filepath.ToSlash(rel), f.Line, f.Message))
+		all = append(all, found{Rule: f.RuleID, File: filepath.ToSlash(rel), Tool: f.Tool, Line: f.Line, Message: f.Message})
 	}
-	return c, strings.Join(lines, "\n"), nil
+	return c, all, nil
+}
+
+func listing(fs []found) string {
+	lines := make([]string, len(fs))
+	for i, f := range fs {
+		lines[i] = fmt.Sprintf("    %s %s:%d %s", f.Rule, f.File, f.Line, f.Message)
+	}
+	return strings.Join(lines, "\n")
+}
+
+// tally holds the labelled outcome per rule across all repositories.
+type tally map[string]*struct{ tp, fp int }
+
+func (t tally) add(rule, lbl string) {
+	if t[rule] == nil {
+		t[rule] = &struct{ tp, fp int }{}
+	}
+	switch lbl {
+	case "tp":
+		t[rule].tp++
+	case "fp":
+		t[rule].fp++
+	}
+}
+
+// reconcile matches findings against labels (one label consumes one finding with the same
+// key). It returns problems: findings without a label, labels with no finding, labels still
+// "todo", and known gaps that are now detected. With update it instead rewrites the labels:
+// stale ones are dropped and unlabelled findings get a "todo" stub.
+func reconcile(r *repo, fs []found, t tally, update bool) []string {
+	var problems []string
+	pool := map[string][]int{} // key -> indexes into r.Labels
+	for i, l := range r.Labels {
+		pool[l.key()] = append(pool[l.key()], i)
+	}
+	used := make([]bool, len(r.Labels))
+	var stubs []label
+	for _, f := range fs {
+		if idx := pool[f.key()]; len(idx) > 0 {
+			i := idx[0]
+			pool[f.key()] = idx[1:]
+			used[i] = true
+			continue
+		}
+		stubs = append(stubs, label{Rule: f.Rule, File: f.File, Tool: f.Tool, Label: "todo", Note: f.Message})
+		problems = append(problems, fmt.Sprintf("%s: unlabelled finding %s %s:%d %s", r.Name, f.Rule, f.File, f.Line, f.Message))
+	}
+	kept := r.Labels[:0:0]
+	for i, l := range r.Labels {
+		if !used[i] {
+			problems = append(problems, fmt.Sprintf("%s: stale label for %s %s (no such finding any more)", r.Name, l.Rule, l.File))
+			continue
+		}
+		if l.Label != "tp" && l.Label != "fp" {
+			problems = append(problems, fmt.Sprintf("%s: label for %s %s is %q: review it as tp or fp", r.Name, l.Rule, l.File, l.Label))
+		}
+		t.add(l.Rule, l.Label)
+		kept = append(kept, l)
+	}
+	for _, g := range r.KnownGaps {
+		for _, f := range fs {
+			if f.key() == g.key() {
+				problems = append(problems, fmt.Sprintf("%s: known gap now detected (%s %s): move it into labels as tp", r.Name, g.Rule, g.File))
+			}
+		}
+	}
+	if update {
+		r.Labels = append(append([]label(nil), kept...), stubs...)
+		return nil
+	}
+	return problems
+}
+
+func precisionReport(t tally, min float64) (text string, failures []string) {
+	rules := make([]string, 0, len(t))
+	for k := range t {
+		rules = append(rules, k)
+	}
+	sort.Strings(rules)
+	var sb strings.Builder
+	sb.WriteString("\n| Rule | TP | FP | Precision |\n|---|---|---|---|\n")
+	for _, id := range rules {
+		c := t[id]
+		p := 1.0
+		if n := c.tp + c.fp; n > 0 {
+			p = float64(c.tp) / float64(n)
+		}
+		fmt.Fprintf(&sb, "| %s | %d | %d | %.0f%% |\n", id, c.tp, c.fp, p*100)
+		fmt.Printf("  %-8s tp=%-3d fp=%-3d precision=%.0f%%\n", id, c.tp, c.fp, p*100)
+		if p < min {
+			failures = append(failures, fmt.Sprintf("precision of %s is %.0f%%, below the %.0f%% floor", id, p*100, min*100))
+		}
+	}
+	return sb.String(), failures
 }
 
 func equal(a, b counts) bool {

@@ -1,0 +1,11 @@
+{
+  "mcpServers": {
+    "search": { "command": "npx", "args": ["-y", "some-search-mcp"] },
+    "latest": { "command": "npx", "args": ["-y", "@acme/tools@latest"] },
+    "py": { "command": "uvx", "args": ["some-db-mcp"] },
+    "db": { "command": "docker", "args": ["run", "-i", "--rm", "-e", "TOKEN", "acme/db-mcp"] },
+    "priv": { "command": "docker", "args": ["run", "--rm", "--privileged", "-v", "/var/run/docker.sock:/var/run/docker.sock", "acme/ops:1.2.0"] },
+    "install": { "command": "bash", "args": ["-c", "curl -fsSL https://example.com/install.sh | sh && run-server"] },
+    "remote": { "url": "http://mcp.vendor.dev/sse" }
+  }
+}
