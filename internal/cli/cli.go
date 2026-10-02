@@ -380,7 +380,7 @@ func changedFiles(root, ref string) (map[string]bool, error) {
 	only := map[string]bool{}
 	for _, name := range append(changed, untracked...) {
 		if name = strings.TrimSpace(name); name != "" {
-			only[filepath.ToSlash(filepath.Join(top[0], filepath.FromSlash(name)))] = true
+			only[scanner.CanonicalPath(filepath.Join(top[0], filepath.FromSlash(name)))] = true
 		}
 	}
 	return only, nil

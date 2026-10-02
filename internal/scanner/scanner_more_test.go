@@ -139,8 +139,7 @@ func TestSkipCountsAndOnly(t *testing.T) {
 	if res.Skipped.Binary != 1 || res.Skipped.TooLarge != 3 || res.Skipped.Total() != 4 || res.FilesScanned != 0 {
 		t.Errorf("skipped = %+v, scanned = %d", res.Skipped, res.FilesScanned)
 	}
-	abs, _ := filepath.Abs(filepath.Join(dir, "ok.py"))
-	res, err = Scan(Options{Root: dir, Rules: rules.Builtin(), Only: map[string]bool{filepath.ToSlash(abs): true}})
+	res, err = Scan(Options{Root: dir, Rules: rules.Builtin(), Only: map[string]bool{CanonicalPath(filepath.Join(dir, "ok.py")): true}})
 	if err != nil {
 		t.Fatal(err)
 	}

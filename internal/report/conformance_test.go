@@ -56,7 +56,7 @@ func golden(t *testing.T, name, got string) {
 	if err != nil {
 		t.Fatalf("%v (run: go test ./internal/report -update)", err)
 	}
-	if string(want) != got {
+	if strings.ReplaceAll(string(want), "\r\n", "\n") != got { // checkouts with autocrlf (Windows) rewrite line endings
 		t.Errorf("%s differs from the golden file; if the change is intended run: go test ./internal/report -update\n--- got ---\n%s", name, got)
 	}
 }
@@ -71,7 +71,7 @@ func render(t *testing.T, format string) string {
 }
 
 func TestGoldenOutputs(t *testing.T) {
-	for format, file := range map[string]string{"sarif": "report.sarif", "json": "report.json", "markdown": "report.md", "github": "report.github", "text": "report.txt"} {
+	for format, file := range map[string]string{"sarif": "report.sarif.json", "json": "report.json", "markdown": "report.md", "github": "report.github", "text": "report.txt"} {
 		golden(t, file, render(t, format))
 	}
 }

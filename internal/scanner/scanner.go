@@ -50,6 +50,23 @@ var testFileRe = regexp.MustCompile(`(?i)(?:_test\.go|_test\.py|^test_.*\.py|^co
 
 func isTestFile(name string) bool { return testFileRe.MatchString(name) }
 
+// CanonicalPath returns a form of p that compares equal however the path was spelled: absolute,
+// symlinks resolved (macOS /var vs /private/var, Windows short names), slash-separated, and
+// lower-cased on case-insensitive platforms. Options.Only keys must be built with it.
+func CanonicalPath(p string) string {
+	if abs, err := filepath.Abs(p); err == nil {
+		p = abs
+	}
+	if real, err := filepath.EvalSymlinks(p); err == nil {
+		p = real
+	}
+	p = filepath.ToSlash(p)
+	if runtime.GOOS == "windows" || runtime.GOOS == "darwin" {
+		p = strings.ToLower(p)
+	}
+	return p
+}
+
 // Options configures a scan.
 type Options struct {
 	// Root is the file or directory to scan, as given by the user.
@@ -455,11 +472,8 @@ func crossSafe(g *source.File, active []rules.Rule, calls []rules.CrossCall, res
 // unreadable and the walk continues; only a failure on the root itself is returned.
 func walk(root string, info fs.FileInfo, opts Options, emit func(string), unreadable func(string, error)) error {
 	send := func(p string) {
-		if opts.Only != nil {
-			abs, err := filepath.Abs(p)
-			if err != nil || !opts.Only[filepath.ToSlash(abs)] {
-				return
-			}
+		if opts.Only != nil && !opts.Only[CanonicalPath(p)] {
+			return
 		}
 		emit(p)
 	}

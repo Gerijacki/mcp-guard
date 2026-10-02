@@ -87,7 +87,7 @@ func TestExtractionGolden(t *testing.T) {
 			if err != nil {
 				t.Fatalf("%v (run: go test ./internal/extract -update)", err)
 			}
-			if strings.TrimSpace(string(want)) != strings.TrimSpace(string(got)) {
+			if strings.TrimSpace(strings.ReplaceAll(string(want), "\r\n", "\n")) != strings.TrimSpace(string(got)) {
 				t.Errorf("extraction of %s changed; if intended run: go test ./internal/extract -update\n--- got ---\n%s", name, got)
 			}
 		})

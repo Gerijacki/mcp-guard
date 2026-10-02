@@ -2,3 +2,7 @@
 * text=auto eol=lf
 *.ps1 text eol=crlf
 *.gif binary
+# Golden files and fixtures are compared byte for byte (line numbers are part of the expectations).
+internal/*/testdata/** text eol=lf
+testdata/** text eol=lf
+benchmark/corpus.yaml text eol=lf
