@@ -15,24 +15,27 @@ go build ./...                                   # compile
 go test ./...                                    # all tests (fast, no network)
 go vet ./...
 gofmt -l .                                       # must print nothing
-go run ./cmd/mcp-guard scan examples/vulnerable-server   # demo: exits 1 with findings for all 8 rules
+go run ./cmd/mcp-guard scan examples/vulnerable-server   # demo: exits 1 with findings for every rule except MCPG016 (which needs `--lock`)
 go run ./cmd/mcp-guard scan . --fail-on none     # dogfood: the repo itself (tests/testdata are skipped by default)
+go run ./cmd/mcp-guard tools .                   # what the extractors found (first thing to check for a missed finding)
+go test ./internal/report ./internal/extract -update   # refresh golden files after an intended output/extraction change
 ```
 
 ## Architecture (read docs/ARCHITECTURE.md for detail)
 
-`cli` → `config` → `scanner.Scan` → per file: `source.NewFile` → `extract.Extract` (fills `File.Tools` / `File.Servers`) → each `rules.Rule.Check` → inline suppression → post-processing → `report.Write`.
+`cli` → `config` → `scanner.Scan` (phase 1: `source.NewFile` → `extract.Extract` fills `File.Tools` / `File.Funcs` / `File.Servers`; phase 2: each `rules.Rule.Check` + inline suppression; phase 3: helpers defined in other files) → post-processing → baseline filter → `report.Write`.
 
 - `internal/source`: `File`, `Tool`, `Language` and the tiny lexer (`MatchClose`, `SplitArgs`, `ParseStringLiteral`, `StatementsIn`, `ContainsIdent`). No dependencies on other internal packages.
 - `internal/extract`: one file per language (`python.go`, `typescript.go`, `golang.go`) plus `config.go`. Tool bodies are byte ranges (`BodyFrom`/`BodyTo`), always set via `File.SetBody`.
-- `internal/rules`: `mcpgNNN_*.go` built-ins, `taint.go` (`walkTaint`: in-order statements, assignment propagation, sanitizer kills), `custom.go` (YAML rules).
-- Rule IDs `MCPG001`–`MCPG008` are public API (SARIF, suppressions, configs). Never renumber them.
+- `internal/rules`: `mcpgNNN_*.go` built-ins, `taint.go` (`walkTaint`: in-order statements, assignment propagation, sanitizer kills), `helpers.go` (helper summaries, same-file and cross-file), `extend.go` (`extend:` config), `custom.go` (YAML rules).
+- `internal/scanner`: the 3-phase pipeline, `index.go` (cross-file function index), `suppress.go` (comment-only suppressions). Anything that depends on scheduling must be decided on sorted input: results must not change with `--workers`.
+- Rule IDs `MCPG001`–`MCPG017` are public API (SARIF, suppressions, configs). Never renumber them.
 
 ## Conventions
 
 - Pure Go, no cgo. The only third-party dependency is `gopkg.in/yaml.v3`. Ask before adding another.
 - Keep the Go directive at `go 1.23` for compatibility. `min`/`max` builtins are fine.
-- Every rule change needs fixtures in `testdata/rules/<ID>/{vulnerable,safe}/` and an updated exact count in `wantCounts` (`internal/rules/rules_test.go`). Safe fixtures should be near-misses done correctly.
+- Every rule change needs fixtures in `testdata/rules/<ID>/{vulnerable,safe}/` and an updated exact count in `wantCounts` (`internal/rules/rules_test.go`). Safe fixtures should be near-misses done correctly. Taint-based rules iterate `taintBodies(f)` (tools + helper views) and have a `containsAny` pre-filter; guard evidence is looked up in `f.CodeText(t)` (comments and docstring removed), never in `f.BodyText(t)`.
 - Put secret-format tests in Go code with runtime string concatenation (`TestKnownSecretFormats`), never as literal tokens in fixtures, so GitHub push protection and secret scanners are not triggered.
 - Snippets are untrusted input: always build them with `snippet()`, which escapes control and invisible characters.
 - Messages: one sentence, name the tool and the tainted identifier, and state the vulnerability class.
@@ -41,7 +44,7 @@ go run ./cmd/mcp-guard scan . --fail-on none     # dogfood: the repo itself (tes
 
 ## Validation against real servers
 
-`go run ./tools/accuracy` scans the public MCP repositories pinned in `benchmark/corpus.yaml` and fails if extracted tools or findings change (CI job `accuracy`). When a heuristic change moves the numbers, inspect every new or missing finding. Only then refresh the expectations with `-update`, and justify the change in the commit message. Today the corpus yields 9 findings, all plausible true positives: keep precision that high. `.github/workflows/canary.yml` runs `-latest` weekly against default branches to detect SDK API drift, and it tests the published Action.
+`go run ./tools/accuracy` scans the public MCP repositories pinned in `benchmark/corpus.yaml` and fails if extracted tools or findings change, if a finding has no label, or if per-rule precision (tp/(tp+fp) over the labels) drops below `min-precision` (CI job `accuracy`). When a heuristic change moves the numbers, inspect every new or missing finding. Only then refresh the expectations with `-update` (new findings are written as `label: todo`; set each to `tp` or `fp` with a note), and justify the change in the commit message. Today every labelled finding is a true positive: keep precision that high. A rule that is noisy on real repositories must be narrowed, not accepted (MCPG017 was cut to single files for that reason). `.github/workflows/canary.yml` runs `-latest` weekly against default branches to detect SDK API drift, and it tests the published Action.
 
 Robustness: `FuzzAnalyze` (CI job `fuzz`) and `TestPathologicalInputs` (skipped with `-short`; CI runs it without `-race`) guard the lexer/extractors against panics and super-linear blowups.
 
@@ -50,7 +53,7 @@ Robustness: `FuzzAnalyze` (CI job `fuzz`) and `TestPathologicalInputs` (skipped 
 - `.github/workflows/ci.yml` runs on every push/PR:
   - tests on Linux/macOS/Windows with stable Go, plus Go 1.23 (the `go.mod` minimum)
   - golangci-lint (`.golangci.yml`), govulncheck, `goreleaser check`
-  - **dogfood**: the Action from source (`uses: ./`, `version: source`). The repo must scan clean, and `examples/vulnerable-server` must fail with all 8 rules present in its SARIF.
+  - **dogfood**: the Action from source (`uses: ./`, `version: source`). The repo must scan clean, and `examples/vulnerable-server` must fail with every rule except MCPG016 present in its SARIF.
 - `codeql.yml`: CodeQL for Go. `dependabot.yml`: weekly updates for gomod and actions.
 - **Release:** push a `vX.Y.Z` tag. `release.yml` runs GoReleaser (`.goreleaser.yaml`), then attests build provenance for the archives, checksums and image (`actions/attest-build-provenance`). SPDX SBOMs come from syft. GoReleaser produces:
   - binaries and archives `mcp-guard_<os>_<arch>` (names must stay stable: `action.yml`, `install.sh` and `install.ps1` depend on them)
@@ -64,7 +67,7 @@ Robustness: `FuzzAnalyze` (CI job `fuzz`) and `TestPathologicalInputs` (skipped 
 
 ## Roadmap ideas (not yet implemented)
 
-- More rules: SSRF in fetch tools, unsafe deserialization (pickle/yaml.load), overly broad OAuth scopes in configs, `npx -y` unpinned packages in client configs, logging of tool arguments that carry secrets.
-- Cross-file handler resolution and helper-function summaries.
-- `--baseline` file to only report new findings.
+- A real parser behind the extractors (tree-sitter via a pure-Go runtime, or per-language parsers) for exact scoping, imports and aliases; name-based helper resolution would then become import-based.
+- More SDKs and languages (Java, Kotlin, C#, Rust).
+- DNS-rebinding / Origin-validation checks for local HTTP servers.
 - Scanning installed third-party servers (npm/PyPI package or Docker image) before adding them to a client.

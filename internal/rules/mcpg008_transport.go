@@ -20,6 +20,10 @@ var (
 		// Node: app.listen(port) / app.listen(port, callback) without a host.
 		regexp.MustCompile(`\.listen\s*\(\s*[\w.]+\s*(?:\)|,\s*(?:\(|function\b|async\b|\w+\s*=>))`),
 	}
+	// Permissive CORS: any web page the user visits can call the server from their browser.
+	corsWildcardRe = regexp.MustCompile(`(?i)Access-Control-Allow-Origin["']?\s*[:,)]\s*["']\*["']|allow_origins\s*=\s*\[\s*["']\*["']|\borigin\s*:\s*(?:["']\*["']|true)\b|\bcors\s*\(\s*\)|AllowedOrigins\s*:\s*\[\]string\{\s*"\*"`)
+	// SDK switches that make the server reject requests from foreign origins/hosts.
+	originGuardRe  = regexp.MustCompile(`(?i)enableDnsRebindingProtection|allowedHosts|allowedOrigins|allowed_origins|allowed_hosts|TransportSecuritySettings|hostHeaderValidation`)
 	authEvidenceRe = regexp.MustCompile(`(?i)\bauth(?:enticat|oriz|[_-]|Middleware|Provider|Settings|Handler|\b)|bearer|api[_-]?key|\bjwt\b|oauth|token[_-]?verifier|verify[_-]?token|basicauth|x-api-key|passport\b|requireAuth|\bclerk\b`)
 )
 
@@ -43,13 +47,17 @@ func (transportRule) Meta() Meta {
 }
 
 func (r transportRule) Check(f *source.File) []finding.Finding {
-	if !f.Language.IsCode() || !httpTransportRe.MatchString(f.Content) || authEvidenceRe.MatchString(f.Content) {
+	if !f.Language.IsCode() || !containsAny(strings.ToLower(f.Content), "sse", "streamable", "transport", "http") || !httpTransportRe.MatchString(f.Content) {
 		return nil
 	}
-	for i, line := range f.Lines {
-		if t := strings.TrimSpace(line); strings.HasPrefix(t, "#") || strings.HasPrefix(t, "//") || strings.HasPrefix(t, "*") {
-			continue
-		}
+	// Comments are blanked so that "# TODO: add auth" is not taken as authentication.
+	code := f.Code()
+	if authEvidenceRe.MatchString(code) {
+		return nil
+	}
+	var out []finding.Finding
+	lines := strings.Split(code, "\n")
+	for i, line := range lines {
 		for _, re := range allInterfacesRe {
 			if re.MatchString(line) {
 				return []finding.Finding{newFinding(r.Meta(), f, i+1, finding.Medium, "",
@@ -57,5 +65,17 @@ func (r transportRule) Check(f *source.File) []finding.Finding {
 			}
 		}
 	}
-	return nil
+	// CORS * is reported for Node servers only: the Python and Go SDKs validate the Origin
+	// header (or document the wildcard as their default), so it is not a finding there.
+	if f.Language != source.TypeScript || originGuardRe.MatchString(code) {
+		return out
+	}
+	for i, line := range lines {
+		if corsWildcardRe.MatchString(line) {
+			out = append(out, newFinding(r.Meta(), f, i+1, finding.Medium, "",
+				"MCP HTTP/SSE server allows any web origin (CORS *) and no authentication was found: a malicious web page can call its tools."))
+			return out
+		}
+	}
+	return out
 }

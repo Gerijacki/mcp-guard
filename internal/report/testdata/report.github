@@ -1,0 +1,4 @@
+::error file=src/server.py,line=12,title=MCPG004 command-injection::Tool "run" interpolates model-controlled "cmd" into a shell command (command injection).
+::warning file=src/files.py,line=7,title=MCPG001 unrestricted-file-access::Tool "read_file" reads a model-controlled path | with a pipe.
+::notice file=src/web.ts,line=30,title=MCPG008 exposed-network-transport::Server listens on all interfaces.
+::warning::src/big.py: skipped, analysis took longer than 10s

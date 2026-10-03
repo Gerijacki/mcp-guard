@@ -1,0 +1,205 @@
+{
+  "$schema": "https://json.schemastore.org/sarif-2.1.0.json",
+  "version": "2.1.0",
+  "runs": [
+    {
+      "tool": {
+        "driver": {
+          "name": "mcp-guard",
+          "informationUri": "https://github.com/Gerijacki/mcp-guard",
+          "version": "test",
+          "rules": [
+            {
+              "id": "MCPG001",
+              "name": "unrestricted-file-access",
+              "shortDescription": {
+                "text": "File access"
+              },
+              "fullDescription": {
+                "text": "Long description."
+              },
+              "help": {
+                "text": "Fix it.",
+                "markdown": "**File access**\n\nLong description.\n\n**Remediation:** Fix it.\n\n[Rule documentation](https://github.com/Gerijacki/mcp-guard/blob/main/docs/rules/MCPG001.md)\n"
+              },
+              "helpUri": "https://github.com/Gerijacki/mcp-guard/blob/main/docs/rules/MCPG001.md",
+              "defaultConfiguration": {
+                "level": "error"
+              },
+              "properties": {
+                "tags": [
+                  "security",
+                  "mcp",
+                  "external/cwe/cwe-22",
+                  "external/owasp/mcp02:2025"
+                ],
+                "precision": "medium",
+                "security-severity": "8.0"
+              }
+            },
+            {
+              "id": "MCPG004",
+              "name": "command-injection",
+              "shortDescription": {
+                "text": "Command injection"
+              },
+              "fullDescription": {
+                "text": "Long description."
+              },
+              "help": {
+                "text": "Fix it.",
+                "markdown": "**Command injection**\n\nLong description.\n\n**Remediation:** Fix it.\n\n[Rule documentation](https://github.com/Gerijacki/mcp-guard/blob/main/docs/rules/MCPG004.md)\n"
+              },
+              "helpUri": "https://github.com/Gerijacki/mcp-guard/blob/main/docs/rules/MCPG004.md",
+              "defaultConfiguration": {
+                "level": "error"
+              },
+              "properties": {
+                "tags": [
+                  "security",
+                  "mcp",
+                  "external/cwe/cwe-78",
+                  "external/owasp/mcp05:2025"
+                ],
+                "precision": "medium",
+                "security-severity": "9.5"
+              }
+            },
+            {
+              "id": "MCPG008",
+              "name": "exposed-network-transport",
+              "shortDescription": {
+                "text": "Exposed transport"
+              },
+              "fullDescription": {
+                "text": "Long description."
+              },
+              "help": {
+                "text": "Fix it.",
+                "markdown": "**Exposed transport**\n\nLong description.\n\n**Remediation:** Fix it.\n\n[Rule documentation](https://github.com/Gerijacki/mcp-guard/blob/main/docs/rules/MCPG008.md)\n"
+              },
+              "helpUri": "https://github.com/Gerijacki/mcp-guard/blob/main/docs/rules/MCPG008.md",
+              "defaultConfiguration": {
+                "level": "warning"
+              },
+              "properties": {
+                "tags": [
+                  "security",
+                  "mcp",
+                  "external/cwe/cwe-306",
+                  "external/owasp/mcp07:2025"
+                ],
+                "precision": "medium",
+                "security-severity": "5.5"
+              }
+            }
+          ]
+        }
+      },
+      "invocations": [
+        {
+          "executionSuccessful": false,
+          "toolExecutionNotifications": [
+            {
+              "level": "warning",
+              "message": {
+                "text": "src/big.py: skipped, analysis took longer than 10s"
+              }
+            }
+          ]
+        }
+      ],
+      "results": [
+        {
+          "ruleId": "MCPG004",
+          "ruleIndex": 1,
+          "level": "error",
+          "message": {
+            "text": "Tool \"run\" interpolates model-controlled \"cmd\" into a shell command (command injection)."
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "src/server.py"
+                },
+                "region": {
+                  "startLine": 12,
+                  "snippet": {
+                    "text": "os.system(cmd)"
+                  }
+                }
+              }
+            }
+          ],
+          "partialFingerprints": {
+            "mcpGuardFingerprint/v1": "7d6bb51a6369020afaa943a17e4509c9"
+          },
+          "properties": {
+            "severity": "critical",
+            "tool": "run"
+          }
+        },
+        {
+          "ruleId": "MCPG001",
+          "ruleIndex": 0,
+          "level": "warning",
+          "message": {
+            "text": "Tool \"read_file\" reads a model-controlled path | with a pipe."
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "src/files.py"
+                },
+                "region": {
+                  "startLine": 7,
+                  "snippet": {
+                    "text": "x = 1"
+                  }
+                }
+              }
+            }
+          ],
+          "partialFingerprints": {
+            "mcpGuardFingerprint/v1": "08fd0a47edcfeda21b791199f2c2c464"
+          },
+          "properties": {
+            "severity": "medium",
+            "tool": "read_file"
+          }
+        },
+        {
+          "ruleId": "MCPG008",
+          "ruleIndex": 2,
+          "level": "note",
+          "message": {
+            "text": "Server listens on all interfaces."
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "src/web.ts"
+                },
+                "region": {
+                  "startLine": 30,
+                  "snippet": {
+                    "text": "x = 1"
+                  }
+                }
+              }
+            }
+          ],
+          "partialFingerprints": {
+            "mcpGuardFingerprint/v1": "44e97ed389894b64192555d1b6e042b3"
+          },
+          "properties": {
+            "severity": "low"
+          }
+        }
+      ]
+    }
+  ]
+}

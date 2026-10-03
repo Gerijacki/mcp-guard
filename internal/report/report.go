@@ -16,7 +16,7 @@ type Options struct {
 }
 
 // Formats lists the supported output formats.
-var Formats = []string{"text", "json", "sarif"}
+var Formats = []string{"text", "json", "sarif", "markdown", "github"}
 
 // Write renders res in the given format.
 func Write(w io.Writer, format string, res *scanner.Result, opts Options) error {
@@ -27,6 +27,10 @@ func Write(w io.Writer, format string, res *scanner.Result, opts Options) error 
 		return writeJSON(w, res, opts)
 	case "sarif":
 		return writeSARIF(w, res, opts)
+	case "markdown", "md":
+		return writeMarkdown(w, res, opts)
+	case "github":
+		return writeGitHub(w, res)
 	}
 	return fmt.Errorf("unknown format %q (want one of: %s)", format, strings.Join(Formats, ", "))
 }

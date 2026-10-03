@@ -1,0 +1,23 @@
+mcp-guard test  ·  3 files  ·  2 MCP tools  ·  0 client configs
+
+ CRITICAL  MCPG004 command-injection
+  src/server.py:12  (tool: run)
+  Tool "run" interpolates model-controlled "cmd" into a shell command (command injection).
+    12 │ os.system(cmd)
+  → https://github.com/Gerijacki/mcp-guard/blob/main/docs/rules/MCPG004.md
+
+ MEDIUM    MCPG001 unrestricted-file-access
+  src/files.py:7  (tool: read_file)
+  Tool "read_file" reads a model-controlled path | with a pipe.
+     7 │ x = 1
+  → https://github.com/Gerijacki/mcp-guard/blob/main/docs/rules/MCPG001.md
+
+ LOW       MCPG008 exposed-network-transport
+  src/web.ts:30
+  Server listens on all interfaces.
+    30 │ x = 1
+  → https://github.com/Gerijacki/mcp-guard/blob/main/docs/rules/MCPG008.md
+
+Found 3 issues: 1 critical, 1 medium, 1 low
+3 files skipped (2 too large, 1 timed out)
+3 existing findings hidden by the baseline

@@ -69,49 +69,51 @@ runs:
           url="https://github.com/Gerijacki/mcp-guard/releases/download/${VERSION}/${asset}"
         fi
         curl -fsSL "$url" -o "$dir/$asset"
+        curl -fsSL "${url%/*}/checksums.txt" -o "$dir/checksums.txt"
+        expected="$(grep " ${asset}\$" "$dir/checksums.txt" | cut -d ' ' -f 1)"
+        [ -n "$expected" ] || { echo "no checksum for ${asset} in checksums.txt"; exit 1; }
+        if command -v sha256sum >/dev/null 2>&1; then actual="$(sha256sum "$dir/$asset" | cut -d ' ' -f 1)"
+        else actual="$(shasum -a 256 "$dir/$asset" | cut -d ' ' -f 1)"; fi
+        [ "$expected" = "$actual" ] || { echo "checksum mismatch for ${asset}: expected ${expected}, got ${actual}"; exit 1; }
         if [ "$ext" = zip ]; then unzip -q -o "$dir/$asset" -d "$dir"; else tar -xzf "$dir/$asset" -C "$dir"; fi
         echo "$dir" >> "$GITHUB_PATH"
 
-    - name: Scan (SARIF)
-      shell: bash
-      env:
-        SCAN_PATH: ${{ inputs.path }}
-        MIN_SEVERITY: ${{ inputs.min-severity }}
-        SARIF_FILE: ${{ inputs.sarif-file }}
-        EXTRA_ARGS: ${{ inputs.args }}
-      run: |
-        # shellcheck disable=SC2086 # EXTRA_ARGS is intentionally word-split
-        mcp-guard scan "$SCAN_PATH" --format sarif --output "$SARIF_FILE" \
-          --min-severity "$MIN_SEVERITY" --fail-on none $EXTRA_ARGS
-
-    - name: Upload SARIF
-      if: ${{ inputs.upload-sarif == 'true' }}
-      uses: github/codeql-action/upload-sarif@v4
-      with:
-        sarif_file: ${{ inputs.sarif-file }}
-        category: mcp-guard
-
-    - name: Scan (report)
+    - name: Scan
+      id: scan
       shell: bash
       env:
         SCAN_PATH: ${{ inputs.path }}
         MIN_SEVERITY: ${{ inputs.min-severity }}
         FAIL_ON: ${{ inputs.fail-on }}
+        SARIF_FILE: ${{ inputs.sarif-file }}
         EXTRA_ARGS: ${{ inputs.args }}
       run: |
+        # One scan produces the SARIF file, the step summary and the exit code. The exit
+        # code is kept so that the SARIF upload still runs when findings fail the step.
         set +e
-        report="${RUNNER_TEMP}/mcp-guard.txt"
-        # shellcheck disable=SC2086
-        mcp-guard scan "$SCAN_PATH" --no-color --min-severity "$MIN_SEVERITY" --fail-on "$FAIL_ON" $EXTRA_ARGS | tee "$report"
-        code=${PIPESTATUS[0]}
+        summary="${RUNNER_TEMP}/mcp-guard.md"
+        read -r -a extra <<< "$EXTRA_ARGS"   # whitespace-separated; no globbing
+        mcp-guard scan "$SCAN_PATH" --no-color --min-severity "$MIN_SEVERITY" --fail-on "$FAIL_ON" \
+          --format text --also "sarif=${SARIF_FILE}" --also "markdown=${summary}" "${extra[@]}"
+        code=$?
         {
-          echo "### mcp-guard: $(tail -n 1 "$report")"
+          echo '<details open><summary>mcp-guard report</summary>'
           echo
-          echo '<details><summary>Full report</summary>'
+          cat "$summary" 2>/dev/null
           echo
-          echo '```'
-          head -n 400 "$report"
-          echo '```'
           echo '</details>'
         } >> "$GITHUB_STEP_SUMMARY"
-        exit "$code"
+        echo "code=$code" >> "$GITHUB_OUTPUT"
+
+    - name: Upload SARIF
+      if: ${{ always() && inputs.upload-sarif == 'true' && steps.scan.outputs.code != '2' }}
+      uses: github/codeql-action/upload-sarif@v4
+      with:
+        sarif_file: ${{ inputs.sarif-file }}
+        category: mcp-guard
+
+    - name: Fail on findings
+      shell: bash
+      env:
+        CODE: ${{ steps.scan.outputs.code }}
+      run: exit "${CODE:-2}"

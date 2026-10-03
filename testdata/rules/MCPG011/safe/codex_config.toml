@@ -1,0 +1,9 @@
+[mcp_servers.github]
+command = "npx"
+args = ["-y", "@modelcontextprotocol/server-github@2025.4.8"]
+
+[mcp_servers.docs]
+url = "https://docs.vendor.dev/mcp"
+
+[mcp_servers.local]
+url = "http://127.0.0.1:8080/mcp"

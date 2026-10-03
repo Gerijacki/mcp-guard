@@ -1,0 +1,60 @@
+{
+  "tools": [
+    {
+      "name": "read_note",
+      "kind": "resource",
+      "line": 9,
+      "params": [
+        "path"
+      ],
+      "description": "Return a note by path.",
+      "body_lines": [
+        11,
+        12
+      ]
+    },
+    {
+      "name": "review",
+      "kind": "prompt",
+      "line": 15,
+      "params": [
+        "code"
+      ],
+      "description": "Prompt template for reviews.",
+      "body_lines": [
+        17,
+        18
+      ]
+    },
+    {
+      "name": "bare",
+      "line": 21,
+      "params": [
+        "x"
+      ],
+      "description": "A tool registered with the bare decorator.",
+      "body_lines": [
+        23,
+        24
+      ]
+    },
+    {
+      "name": "from_fn",
+      "line": 32,
+      "params": [
+        "q"
+      ],
+      "description": "Registered through Tool.from_function.",
+      "body_lines": [
+        28,
+        29
+      ]
+    }
+  ],
+  "functions": [
+    "bare(x)",
+    "helper_fn(q)",
+    "read_note(path)",
+    "review(code)"
+  ]
+}

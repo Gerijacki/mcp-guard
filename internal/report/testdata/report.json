@@ -1,0 +1,58 @@
+{
+  "tool": "mcp-guard",
+  "version": "test",
+  "summary": {
+    "files_scanned": 3,
+    "tools_found": 2,
+    "resources_found": 0,
+    "prompts_found": 0,
+    "configs_found": 0,
+    "findings": 3,
+    "by_severity": {
+      "critical": 1,
+      "high": 0,
+      "info": 0,
+      "low": 1,
+      "medium": 1
+    },
+    "files_skipped": 3,
+    "baselined": 3
+  },
+  "findings": [
+    {
+      "rule_id": "MCPG004",
+      "rule_name": "command-injection",
+      "severity": "critical",
+      "message": "Tool \"run\" interpolates model-controlled \"cmd\" into a shell command (command injection).",
+      "file": "src/server.py",
+      "line": 12,
+      "snippet": "os.system(cmd)",
+      "tool": "run",
+      "fingerprint": "7d6bb51a6369020afaa943a17e4509c9"
+    },
+    {
+      "rule_id": "MCPG001",
+      "rule_name": "unrestricted-file-access",
+      "severity": "medium",
+      "message": "Tool \"read_file\" reads a model-controlled path | with a pipe.",
+      "file": "src/files.py",
+      "line": 7,
+      "snippet": "x = 1",
+      "tool": "read_file",
+      "fingerprint": "08fd0a47edcfeda21b791199f2c2c464"
+    },
+    {
+      "rule_id": "MCPG008",
+      "rule_name": "exposed-network-transport",
+      "severity": "low",
+      "message": "Server listens on all interfaces.",
+      "file": "src/web.ts",
+      "line": 30,
+      "snippet": "x = 1",
+      "fingerprint": "44e97ed389894b64192555d1b6e042b3"
+    }
+  ],
+  "warnings": [
+    "src/big.py: skipped, analysis took longer than 10s"
+  ]
+}

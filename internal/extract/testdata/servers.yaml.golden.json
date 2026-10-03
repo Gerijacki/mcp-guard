@@ -1,0 +1,16 @@
+{
+  "servers": [
+    {
+      "Name": "files",
+      "Line": 2,
+      "Command": "uvx",
+      "Args": [
+        "mcp-server-filesystem",
+        "/home/me"
+      ],
+      "URL": "",
+      "Env": null,
+      "Headers": null
+    }
+  ]
+}

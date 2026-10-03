@@ -3,13 +3,14 @@ package rules
 import (
 	"fmt"
 	"regexp"
+	"strings"
 
 	"github.com/Gerijacki/mcp-guard/internal/finding"
 	"github.com/Gerijacki/mcp-guard/internal/source"
 )
 
 // MCPG004: a tool parameter reaches a shell, an interpreter or the program name of a process.
-type commandInjectionRule struct{}
+type commandInjectionRule struct{ ext extension }
 
 type sinkKind int
 
@@ -30,12 +31,14 @@ var cmdSinks = map[source.Language][]cmdSink{
 	source.Python: {
 		{re: regexp.MustCompile(`\bos\.(?:system|popen)\s*\(|\bsubprocess\.(?:getoutput|getstatusoutput)\s*\(|\basyncio\.create_subprocess_shell\s*\(|\bcommands\.getoutput\s*\(`), kind: sinkShell},
 		{re: regexp.MustCompile(`\bsubprocess\.(?:run|call|Popen|check_output|check_call)\s*\(`), requires: regexp.MustCompile(`\bshell\s*=\s*True\b`), kind: sinkShell},
+		{re: regexp.MustCompile(`\bsubprocess\.(?:run|call|Popen|check_output|check_call)\s*\(|\basyncio\.create_subprocess_exec\s*\(`), requires: pyArgvShellRe, kind: sinkShell},
 		{re: regexp.MustCompile(`(?:^|[^.\w])(?:eval|exec)\s*\(`), kind: sinkCode},
 		{re: regexp.MustCompile(`\bsubprocess\.(?:run|call|Popen|check_output|check_call)\s*\(|\basyncio\.create_subprocess_exec\s*\(|\bos\.exec[lv]p?e?\s*\(|\bos\.spawn[lv]p?e?\s*\(`), kind: sinkProgram},
 	},
 	source.TypeScript: {
 		{re: regexp.MustCompile(`(?:^|[^.\w$])(?:exec|execSync|execAsync|execPromise|execP)\s*\(|\b(?:child_process|childProcess|cp)\.(?:exec|execSync)\s*\(|\bexecaCommand(?:Sync)?\s*\(|\bshell\.exec\s*\(`), kind: sinkShell},
 		{re: regexp.MustCompile(`\b(?:spawn|spawnSync|execFile|execFileSync|execa|execaSync)\s*\(`), requires: regexp.MustCompile(`\bshell\s*:\s*(?:true|['"])`), kind: sinkShell},
+		{re: regexp.MustCompile(`\b(?:spawn|spawnSync|execFile|execFileSync|execa|execaSync)\s*\(`), requires: tsArgvShellRe, kind: sinkShell},
 		{re: regexp.MustCompile(`(?:^|[^.\w$])eval\s*\(|\bnew\s+Function\s*\(|\bvm\.run\w*\s*\(`), kind: sinkCode},
 		{re: regexp.MustCompile(`\b(?:spawn|spawnSync|execFile|execFileSync|execa|execaSync)\s*\(`), kind: sinkProgram},
 		{re: regexp.MustCompile(`\bBun\.spawn(?:Sync)?\s*\(`), kind: sinkProgram},
@@ -50,10 +53,15 @@ var cmdSinks = map[source.Language][]cmdSink{
 
 var (
 	goShellRe = regexp.MustCompile(`"(?:/bin/|/usr/bin/)?(?:sh|bash|zsh|dash|ash)"\s*,\s*"-c"|"cmd(?:\.exe)?"\s*,\s*"/[cCkK]"|"(?:powershell|pwsh)(?:\.exe)?"`)
+	// Interpreter invoked with its "run this string" flag: ["bash", "-c", cmd] / ("sh", ["-c", cmd]).
+	pyArgvShellRe = regexp.MustCompile(`\[\s*["'](?:/bin/|/usr/bin/)?(?:sh|bash|zsh|dash|ash|cmd|powershell|pwsh)(?:\.exe)?["']\s*,\s*["'](?:-c|-Command|/[cCkK])["']`)
+	tsArgvShellRe = regexp.MustCompile(`["'](?:/bin/|/usr/bin/)?(?:sh|bash|zsh|dash|ash|cmd|powershell|pwsh)(?:\.exe)?["']\s*,\s*\[\s*["'](?:-c|-Command|/[cCkK])["']`)
 	// Quoting helpers that make a value safe to embed in a shell command.
-	shellQuoteRe = regexp.MustCompile(`\bshlex\.(?:quote|join)\s*\(|\bshellescape|\bshell-?quote|\bquote\s*\(|\bescapeShellArg\s*\(|\bshellwords\b|\bshellescape\.Quote\s*\(`)
-	// Evidence that the program is restricted to an allowlist.
-	commandAllowlistRe = regexp.MustCompile(`(?i)allow(?:ed)?[_-]?(?:list|commands?|cmds?|programs?|binaries|executables)|whitelist|\bin\s+[A-Z][A-Z0-9_]{2,}\b|\b[A-Z][A-Z0-9_]{2,}\.(?:includes|has)\s*\(|slices\.Contains\s*\(\s*[A-Z]\w*|\bnot\s+in\s+[A-Z]`)
+	shellQuoteRe = regexp.MustCompile(`\bshlex\.(?:quote|join)\s*\(|\bshellescape|\bshell-?quote|(?:^|[^.\w])quote\s*\(|\bescapeShellArg\s*\(|\bshellwords\b|\bshellescape\.Quote\s*\(`)
+	// Evidence that the program is restricted to an allowlist: a named list anywhere in the
+	// handler, or a membership test on the tainted value itself.
+	commandAllowlistRe  = regexp.MustCompile(`(?i)allow(?:ed)?[_-]?(?:list|commands?|cmds?|programs?|binaries|executables)|whitelist`)
+	commandMembershipRe = regexp.MustCompile(`\bin\s+[A-Z][A-Z0-9_]{2,}\b|\b[A-Z][A-Z0-9_]{2,}\.(?:includes|has)\s*\(|slices\.Contains\s*\(\s*[A-Z]\w*|\bnot\s+in\s+[A-Z]`)
 )
 
 func (commandInjectionRule) Meta() Meta {
@@ -76,14 +84,37 @@ func (commandInjectionRule) Meta() Meta {
 }
 
 func (r commandInjectionRule) Check(f *source.File) []finding.Finding {
+	return r.CheckTools(f, taintBodies(f))
+}
+
+// CheckTools runs the rule on the given tools (the file's tools plus helper views).
+func (r commandInjectionRule) CheckTools(f *source.File, tools []source.Tool) []finding.Finding {
 	sinks := cmdSinks[f.Language]
 	if sinks == nil {
 		return nil
 	}
+	quoteRe := r.ext.withSanitizers(shellQuoteRe)
+	if r.ext.sinks != nil {
+		sinks = append(append([]cmdSink(nil), sinks...), cmdSink{re: r.ext.sinks, kind: sinkShell})
+	}
 	var out []finding.Finding
-	for _, t := range toolBodies(f) {
-		allowlisted := commandAllowlistRe.MatchString(f.BodyText(t))
-		walkTaint(f, t, shellQuoteRe, func(st source.Stmt, taint *taintSet) {
+	for _, t := range tools {
+		allowlisted := commandAllowlistRe.MatchString(f.CodeText(t))
+		validated := map[string]bool{}   // tainted names that went through a membership test
+		literalHead := map[string]bool{} // lists whose first element is a literal program: ["git", ...]
+		walkTaint(f, t, quoteRe, func(st source.Stmt, taint *taintSet) {
+			if a, ok := parseAssign(st.Text); ok && len(a.ids) == 1 && strings.HasPrefix(strings.TrimSpace(a.rhs), "[") {
+				if h := strings.TrimSpace(firstElement(a.rhs, f.Language)); h != "" && (h[0] == '"' || h[0] == '\'') {
+					literalHead[a.ids[0]] = true
+				}
+			}
+			if commandMembershipRe.MatchString(st.Text) {
+				for _, id := range taint.order {
+					if taint.has[id] && source.ContainsIdent(st.Text, id) {
+						validated[id] = true
+					}
+				}
+			}
 			for _, s := range sinks {
 				loc := s.re.FindStringIndex(st.Text)
 				if loc == nil || (s.requires != nil && !s.requires.MatchString(st.Text)) {
@@ -93,7 +124,7 @@ func (r commandInjectionRule) Check(f *source.File) []finding.Finding {
 				var p string
 				switch s.kind {
 				case sinkShell, sinkCode:
-					if shellQuoteRe.MatchString(args) {
+					if quoteRe.MatchString(args) {
 						return
 					}
 					p = taint.find(args)
@@ -104,7 +135,14 @@ func (r commandInjectionRule) Check(f *source.File) []finding.Finding {
 					open := loc[1] - 1
 					callArgsList := callArgs(st.Text, open, f.Language)
 					if s.argIndex < len(callArgsList) {
-						p = taint.find(firstElement(callArgsList[s.argIndex], f.Language))
+						head := strings.TrimSpace(firstElement(callArgsList[s.argIndex], f.Language))
+						if literalHead[head] {
+							continue
+						}
+						p = taint.find(head)
+						if validated[p] {
+							continue
+						}
 					}
 				}
 				if p == "" {
@@ -113,12 +151,12 @@ func (r commandInjectionRule) Check(f *source.File) []finding.Finding {
 				sev, msg := finding.Critical, ""
 				switch s.kind {
 				case sinkShell:
-					msg = fmt.Sprintf("Tool %q interpolates model-controlled %q into a shell command (command injection).", t.Name, p)
+					msg = fmt.Sprintf("%s %q interpolates model-controlled %q into a shell command (command injection).", t.Noun(), t.Name, p)
 				case sinkCode:
-					msg = fmt.Sprintf("Tool %q evaluates model-controlled %q as code (code injection).", t.Name, p)
+					msg = fmt.Sprintf("%s %q evaluates model-controlled %q as code (code injection).", t.Noun(), t.Name, p)
 				case sinkProgram:
 					sev = finding.High
-					msg = fmt.Sprintf("Tool %q lets the model choose the program to execute via %q without an allowlist.", t.Name, p)
+					msg = fmt.Sprintf("%s %q lets the model choose the program to execute via %q without an allowlist.", t.Noun(), t.Name, p)
 				}
 				out = append(out, newFinding(r.Meta(), f, st.Line, sev, t.Name, msg))
 				return // one finding per statement

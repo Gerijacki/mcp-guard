@@ -7,6 +7,8 @@ import (
 	"sort"
 	"strings"
 
+	"gopkg.in/yaml.v3"
+
 	"github.com/Gerijacki/mcp-guard/internal/source"
 )
 
@@ -18,12 +20,21 @@ var jsonTrailingCommaRe = regexp.MustCompile(`,(\s*[}\]])`)
 // "mcpServers"-style map of server entries.
 func extractConfig(f *source.File) {
 	var doc map[string]any
-	data := f.Content
-	if err := json.Unmarshal([]byte(data), &doc); err != nil {
-		// Tolerate JSONC (VS Code / Cursor style): line comments and trailing commas.
-		data = jsonTrailingCommaRe.ReplaceAllString(jsonLineCommentRe.ReplaceAllString(data, ""), "$1")
-		if err := json.Unmarshal([]byte(data), &doc); err != nil {
+	switch f.Language {
+	case source.YAML:
+		if err := yaml.Unmarshal([]byte(f.Content), &doc); err != nil {
 			return
+		}
+	case source.TOML:
+		doc = parseTOML(f.Content)
+	default:
+		data := f.Content
+		if err := json.Unmarshal([]byte(data), &doc); err != nil {
+			// Tolerate JSONC (VS Code / Cursor style): line comments and trailing commas.
+			data = jsonTrailingCommaRe.ReplaceAllString(jsonLineCommentRe.ReplaceAllString(data, ""), "$1")
+			if err := json.Unmarshal([]byte(data), &doc); err != nil {
+				return
+			}
 		}
 	}
 	servers := findServers(doc)
@@ -43,7 +54,7 @@ func extractConfig(f *source.File) {
 		}
 		cs := source.ConfigServer{
 			Name:    name,
-			Line:    f.FindLine(`"`+name+`"`, 1),
+			Line:    serverLine(f, name),
 			Command: str(entry["command"]),
 			URL:     firstNonEmpty(str(entry["url"]), str(entry["serverUrl"])),
 			Env:     strMap(entry["env"]),
@@ -58,9 +69,42 @@ func extractConfig(f *source.File) {
 	}
 }
 
-// findServers returns the server map of an MCP client config, or nil.
+// serverLine finds the line that introduces a server entry in a JSON, YAML or TOML config.
+func serverLine(f *source.File, name string) int {
+	q := regexp.QuoteMeta(name)
+	for _, re := range []*regexp.Regexp{
+		regexp.MustCompile(`^\s*"` + q + `"\s*:`),                         // JSON key
+		regexp.MustCompile(`^\s*'?"?` + q + `'?"?\s*:\s*$`),               // YAML key
+		regexp.MustCompile(`^\s*\[\s*(?:\w+\.)+"?` + q + `"?\s*\]`),       // TOML table
+		regexp.MustCompile(`^\s*-?\s*name\s*:\s*['"]?` + q + `['"]?\s*$`), // YAML list item
+	} {
+		for i, line := range f.Lines {
+			if re.MatchString(line) {
+				return i + 1
+			}
+		}
+	}
+	return f.FindLine(name, 1)
+}
+
+// findServers returns the server map of an MCP client config, or nil. A list of entries with
+// a "name" (Continue-style YAML) is turned into a map.
 func findServers(doc map[string]any) map[string]any {
 	for _, key := range []string{"mcpServers", "mcp_servers", "servers", "context_servers"} {
+		if list, ok := doc[key].([]any); ok {
+			m := map[string]any{}
+			for _, item := range list {
+				if entry, ok := item.(map[string]any); ok {
+					if name := str(entry["name"]); name != "" {
+						m[name] = entry
+					}
+				}
+			}
+			if looksLikeServers(m) {
+				return m
+			}
+			continue
+		}
 		if m, ok := doc[key].(map[string]any); ok && looksLikeServers(m) {
 			return m
 		}

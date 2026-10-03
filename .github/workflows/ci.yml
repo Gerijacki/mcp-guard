@@ -39,7 +39,11 @@ jobs:
           if [ "$RUNNER_OS" = "Linux" ]; then
             go test -race -short -coverprofile=coverage.out ./...
             go test -run 'TestPathologicalInputs' ./internal/rules
-            echo "### Coverage: $(go tool cover -func=coverage.out | tail -n 1 | awk '{print $3}')" >> "$GITHUB_STEP_SUMMARY"
+            go test ./cmd/... # end-to-end tests build and run the real binary (skipped by -short)
+            total="$(go tool cover -func=coverage.out | tail -n 1 | awk '{print $3}')"
+            echo "### Coverage: ${total}" >> "$GITHUB_STEP_SUMMARY"
+            # Floor: lower it only deliberately. Packages are held to 80% by the tests themselves.
+            awk -v t="${total%\%}" 'BEGIN { if (t + 0 < 85) { print "coverage " t "% is below the 85% floor"; exit 1 } }'
           else
             go test ./...
           fi
@@ -134,7 +138,7 @@ jobs:
           OUTCOME: ${{ steps.example.outcome }}
         run: |
           test "$OUTCOME" = failure || { echo "expected the example scan to fail, got $OUTCOME"; exit 1; }
-          for id in MCPG001 MCPG002 MCPG003 MCPG004 MCPG005 MCPG006 MCPG007 MCPG008; do
+          for id in MCPG001 MCPG002 MCPG003 MCPG004 MCPG005 MCPG006 MCPG007 MCPG008 MCPG009 MCPG010 MCPG011 MCPG012 MCPG013 MCPG014 MCPG015 MCPG017; do
             grep -q "\"ruleId\": \"$id\"" example.sarif || { echo "missing $id in SARIF"; exit 1; }
           done
-          echo "all 8 rules detected"
+          echo "all rules that do not need extra input detected (MCPG016 needs --lock)"

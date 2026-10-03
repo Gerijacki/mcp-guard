@@ -1,0 +1,43 @@
+{
+  "servers": [
+    {
+      "Name": "db",
+      "Line": 12,
+      "Command": "docker",
+      "Args": [
+        "run",
+        "-i",
+        "--rm",
+        "acme/db-mcp:2.0.1"
+      ],
+      "URL": "",
+      "Env": {
+        "DB_DSN": "${DB_DSN}"
+      },
+      "Headers": null
+    },
+    {
+      "Name": "docs",
+      "Line": 9,
+      "Command": "",
+      "Args": null,
+      "URL": "http://docs.vendor.dev/mcp",
+      "Env": null,
+      "Headers": null
+    },
+    {
+      "Name": "github",
+      "Line": 4,
+      "Command": "npx",
+      "Args": [
+        "-y",
+        "@modelcontextprotocol/server-github"
+      ],
+      "URL": "",
+      "Env": {
+        "GITHUB_TOKEN": "Zq8vN2kL5xW9pR3tY7uB1mC4"
+      },
+      "Headers": null
+    }
+  ]
+}

@@ -59,6 +59,15 @@ func Builtin() []Rule {
 		destructiveRule{},
 		poisoningRule{},
 		transportRule{},
+		ssrfRule{},
+		deserializationRule{},
+		supplyChainRule{},
+		argInjectionRule{},
+		secretLeakRule{},
+		insecureTLSRule{},
+		oauthRule{},
+		definitionChangedRule{},
+		duplicateToolRule{},
 	}
 	sort.Slice(rs, func(i, j int) bool { return rs[i].Meta().ID < rs[j].Meta().ID })
 	return rs
@@ -108,6 +117,17 @@ func escapeInvisible(s string) string {
 		}
 	}
 	return b.String()
+}
+
+// containsAny is a cheap pre-filter: rules skip a file when none of the words that could
+// make them fire appear in it, before running any regular expression.
+func containsAny(s string, words ...string) bool {
+	for _, w := range words {
+		if strings.Contains(s, w) {
+			return true
+		}
+	}
+	return false
 }
 
 // toolBodies yields the tools of f that have a known handler body.

@@ -43,6 +43,47 @@ var wantCounts = map[string]int{
 	"MCPG008/vulnerable/http_server.py":             1,
 	"MCPG008/vulnerable/http_server.ts":             1,
 	"MCPG008/vulnerable/http_server.go":             1,
+	"MCPG001/vulnerable/bypass.py":                  2,
+	"MCPG002/vulnerable/flow.py":                    2,
+	"MCPG003/vulnerable/args_url_config.json":       2,
+	"MCPG004/vulnerable/interpreter.py":             2,
+	"MCPG005/vulnerable/incremental.py":             1,
+	"MCPG006/vulnerable/body_ops.py":                2,
+	"MCPG007/vulnerable/hidden.py":                  1,
+	"MCPG008/vulnerable/todo_auth.py":               1,
+	"MCPG008/vulnerable/cors.ts":                    1,
+	"MCPG009/vulnerable/fetch.py":                   2,
+	"MCPG009/vulnerable/fetch.ts":                   1,
+	"MCPG009/vulnerable/fetch.go":                   1,
+	"MCPG010/vulnerable/load.py":                    3,
+	"MCPG010/vulnerable/load.ts":                    1,
+	"MCPG010/vulnerable/load.go":                    1,
+	"MCPG005/vulnerable/limit_str.py":               1,
+	"MCPG004/vulnerable/string_param.ts":            1,
+	"MCPG009/vulnerable/concat.ts":                  1,
+	"MCPG004/vulnerable/lowlevel.py":                1,
+	"MCPG004/vulnerable/gosdk.go":                   1,
+	"MCPG004/vulnerable/shell.mjs":                  1,
+	"MCPG001/vulnerable/register.ts":                1,
+	"MCPG017/vulnerable/dup.py":                     1,
+	"MCPG017/vulnerable/dup.ts":                     1,
+	"MCPG001/vulnerable/helper.py":                  1,
+	"MCPG004/vulnerable/helper.ts":                  1,
+	"MCPG005/vulnerable/helper.go":                  1,
+	"MCPG011/vulnerable/mcp.json":                   8,
+	"MCPG011/vulnerable/codex_config.toml":          2,
+	"MCPG011/vulnerable/continue.yaml":              2,
+	"MCPG012/vulnerable/git.py":                     2,
+	"MCPG012/vulnerable/git.ts":                     1,
+	"MCPG012/vulnerable/git.go":                     1,
+	"MCPG013/vulnerable/leak.py":                    2,
+	"MCPG013/vulnerable/leak.ts":                    1,
+	"MCPG013/vulnerable/leak.go":                    1,
+	"MCPG014/vulnerable/tls.py":                     2,
+	"MCPG014/vulnerable/tls.ts":                     1,
+	"MCPG014/vulnerable/tls.go":                     1,
+	"MCPG015/vulnerable/auth.py":                    2,
+	"MCPG015/vulnerable/auth.ts":                    1,
 }
 
 func loadFixture(t *testing.T, path string) *source.File {
@@ -68,6 +109,9 @@ func TestBuiltinRulesAgainstFixtures(t *testing.T) {
 	root := filepath.Join("..", "..", "testdata", "rules")
 	for _, r := range Builtin() {
 		id := r.Meta().ID
+		if id == "MCPG016" {
+			continue // needs a lock file: see lock_rules_test.go
+		}
 		for _, kind := range []string{"vulnerable", "safe"} {
 			dir := filepath.Join(root, id, kind)
 			entries, err := os.ReadDir(dir)

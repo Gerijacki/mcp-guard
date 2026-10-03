@@ -1,0 +1,12 @@
+{
+  "mcpServers": {
+    "search": { "command": "npx", "args": ["-y", "some-search-mcp@1.4.2"] },
+    "scoped": { "command": "npx", "args": ["-y", "@acme/tools@^2.1.0", "--port", "3000"] },
+    "py": { "command": "uvx", "args": ["some-db-mcp==0.9.1"] },
+    "db": { "command": "docker", "args": ["run", "-i", "--rm", "-e", "TOKEN", "acme/db-mcp:2.0.1"] },
+    "pinned": { "command": "docker", "args": ["run", "-i", "--rm", "ghcr.io/acme/ops@sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"] },
+    "local": { "command": "node", "args": ["./server.js"] },
+    "local-http": { "url": "http://localhost:8080/mcp" },
+    "remote": { "url": "https://mcp.vendor.dev/sse" }
+  }
+}

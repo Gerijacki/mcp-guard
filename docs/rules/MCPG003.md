@@ -36,10 +36,11 @@ In server code, read credentials from the environment or a secret manager at sta
 
 ## How it is detected
 
-- **Known formats:** Anthropic, OpenAI, GitHub, GitLab, AWS, Slack, Stripe, Google, Hugging Face, npm, Notion, Linear, SendGrid keys and PEM private keys.
+- **Known formats:** Anthropic, OpenAI, GitHub, GitLab, AWS, Slack, Stripe, Google (API keys and OAuth tokens), Hugging Face, npm, PyPI, Notion, Linear, SendGrid, Groq, OpenRouter, Perplexity, Replicate, Supabase, DigitalOcean, Docker Hub and Discord tokens, JSON Web Tokens and PEM private keys.
 - **Connection strings** with an embedded password (`postgresql://user:pass@host`), ignoring local-development hosts and default passwords.
 - **Authorization headers** with literal bearer/basic tokens.
 - **MCP client configs:** any high-entropy literal in a server's `env` or `headers`, whatever the variable is called.
-- **Generic assignments** such as `api_key = "..."` or `"SECRET": "..."`, filtered by entropy, character mix and a placeholder list (`your-key-here`, `${VAR}`, `<token>`, `changeme`, …).
+- **Command-line and URL secrets in client configs:** a credential-looking flag in `args` (`"--api-key", "…"`, `--token=…`) and a key in the query string of a server `url` (`?api_key=…`), which also end up in logs and shell history.
+- **Generic assignments** such as `api_key = "..."` or `"SECRET": "..."` (and unquoted `password: value` in YAML), filtered by entropy, character mix and a placeholder list (`your-key-here`, `${VAR}`, `<token>`, `changeme`, …).
 
 Snippets in reports are redacted. Files named like `*.example`, `*.sample` or `*.template` are only checked for known formats, and test files are skipped unless `--include-tests` is set.

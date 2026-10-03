@@ -3,6 +3,8 @@ package report
 import (
 	"encoding/json"
 	"io"
+	"os"
+	"path/filepath"
 	"strings"
 
 	"github.com/Gerijacki/mcp-guard/internal/finding"
@@ -25,8 +27,20 @@ type sarifLog struct {
 }
 
 type sarifRun struct {
-	Tool    sarifTool     `json:"tool"`
-	Results []sarifResult `json:"results"`
+	Tool        sarifTool         `json:"tool"`
+	Invocations []sarifInvocation `json:"invocations"`
+	Results     []sarifResult     `json:"results"`
+}
+
+// sarifInvocation records whether the analysis completed; skipped files are notifications.
+type sarifInvocation struct {
+	ExecutionSuccessful        bool                `json:"executionSuccessful"`
+	ToolExecutionNotifications []sarifNotification `json:"toolExecutionNotifications,omitempty"`
+}
+
+type sarifNotification struct {
+	Level   string    `json:"level"`
+	Message sarifText `json:"message"`
 }
 
 type sarifTool struct {
@@ -150,7 +164,7 @@ func writeSARIF(w io.Writer, res *scanner.Result, opts Options) error {
 			Level:     sarifLevel(f.Severity),
 			Message:   sarifText{f.Message},
 			Locations: []sarifLocation{{PhysicalLocation: sarifPhysical{
-				ArtifactLocation: sarifArtifact{URI: f.File},
+				ArtifactLocation: sarifArtifact{URI: sarifURI(f.File)},
 				Region:           sarifRegion{StartLine: f.Line},
 			}}},
 			PartialFingerprints: map[string]string{"mcpGuardFingerprint/v1": f.Fingerprint},
@@ -164,13 +178,40 @@ func writeSARIF(w io.Writer, res *scanner.Result, opts Options) error {
 		}
 		results = append(results, r)
 	}
+	inv := sarifInvocation{ExecutionSuccessful: res.Skipped.Total() == 0}
+	for _, wmsg := range res.Warnings {
+		inv.ToolExecutionNotifications = append(inv.ToolExecutionNotifications, sarifNotification{Level: "warning", Message: sarifText{wmsg}})
+	}
 	enc := json.NewEncoder(w)
 	enc.SetIndent("", "  ")
 	return enc.Encode(sarifLog{
 		Schema:  sarifSchema,
 		Version: sarifVersion,
-		Runs:    []sarifRun{{Tool: sarifTool{Driver: driver}, Results: results}},
+		Runs:    []sarifRun{{Tool: sarifTool{Driver: driver}, Invocations: []sarifInvocation{inv}, Results: results}},
 	})
+}
+
+// sarifURI makes a file path usable as a SARIF artifact URI: relative to the working
+// directory (the repository root in CI) when it is inside it, otherwise a file:// URI.
+// Backslashes never appear in the result.
+func sarifURI(p string) string {
+	p = strings.ReplaceAll(filepath.ToSlash(p), `\`, "/")
+	if !isAbsPath(p) {
+		return strings.TrimPrefix(p, "./")
+	}
+	if cwd, err := os.Getwd(); err == nil {
+		if rel, err := filepath.Rel(cwd, filepath.FromSlash(p)); err == nil && rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
+			return filepath.ToSlash(rel)
+		}
+	}
+	if strings.HasPrefix(p, "/") {
+		return "file://" + p
+	}
+	return "file:///" + p // Windows drive path
+}
+
+func isAbsPath(p string) bool {
+	return strings.HasPrefix(p, "/") || (len(p) >= 3 && p[1] == ':' && p[2] == '/')
 }
 
 func helpMarkdown(m rules.Meta) string {

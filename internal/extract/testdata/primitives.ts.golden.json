@@ -1,0 +1,42 @@
+{
+  "tools": [
+    {
+      "name": "note",
+      "kind": "resource",
+      "line": 7,
+      "params": [
+        "uri",
+        "id"
+      ],
+      "body_lines": [
+        7,
+        8
+      ]
+    },
+    {
+      "name": "review",
+      "kind": "prompt",
+      "line": 11,
+      "params": [
+        "code"
+      ],
+      "description": "Review some code",
+      "body_lines": [
+        11,
+        13
+      ]
+    },
+    {
+      "name": "run",
+      "line": 17,
+      "params": [
+        "args"
+      ],
+      "description": "Run a command",
+      "body_lines": [
+        21,
+        23
+      ]
+    }
+  ]
+}

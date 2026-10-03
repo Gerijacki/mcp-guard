@@ -37,12 +37,42 @@ var knownSecrets = []secretPattern{
 	{"Notion token", regexp.MustCompile(`\bntn_[A-Za-z0-9]{40,}\b`)},
 	{"Linear API key", regexp.MustCompile(`\blin_api_[A-Za-z0-9]{40}\b`)},
 	{"SendGrid API key", regexp.MustCompile(`\bSG\.[A-Za-z0-9_\-]{22}\.[A-Za-z0-9_\-]{43}\b`)},
+	{"PyPI token", regexp.MustCompile(`\bpypi-AgEIcHlwaS5vcmc[A-Za-z0-9_\-]{50,}`)},
+	{"Groq API key", regexp.MustCompile(`\bgsk_[A-Za-z0-9]{40,}\b`)},
+	{"OpenRouter API key", regexp.MustCompile(`\bsk-or-v1-[a-f0-9]{64}\b`)},
+	{"Supabase access token", regexp.MustCompile(`\bsbp_[a-f0-9]{40}\b`)},
+	{"DigitalOcean token", regexp.MustCompile(`\bdop_v1_[a-f0-9]{64}\b`)},
+	{"Docker Hub token", regexp.MustCompile(`\bdckr_pat_[A-Za-z0-9_\-]{27,}`)},
+	{"Replicate API token", regexp.MustCompile(`\br8_[A-Za-z0-9]{37}\b`)},
+	{"Perplexity API key", regexp.MustCompile(`\bpplx-[A-Za-z0-9]{40,}\b`)},
+	{"Google OAuth access token", regexp.MustCompile(`\bya29\.[A-Za-z0-9_\-]{50,}`)},
+	{"Discord bot token", regexp.MustCompile(`\b[MNO][A-Za-z0-9]{23,25}\.[A-Za-z0-9_\-]{6}\.[A-Za-z0-9_\-]{27,}\b`)},
+	{"JSON Web Token", regexp.MustCompile(`\beyJ[A-Za-z0-9_\-]{10,}\.eyJ[A-Za-z0-9_\-]{10,}\.[A-Za-z0-9_\-]{10,}`)},
 	{"Private key", regexp.MustCompile(`-----BEGIN (?:RSA |EC |DSA |OPENSSH |PGP |ENCRYPTED )?PRIVATE KEY(?: BLOCK)?-----`)},
+}
+
+// knownHints lists, per known format, literals one of which must appear in a line for the
+// format's regular expression to be worth running (a substring test is far cheaper).
+var knownHints = map[string][]string{
+	"Anthropic API key": {"sk-ant-"}, "OpenAI API key": {"sk-"}, "GitHub token": {"ghp_", "gho_", "ghu_", "ghs_", "ghr_", "github_pat_"},
+	"GitLab token": {"glpat-"}, "AWS access key ID": {"AKIA", "ASIA", "ABIA", "ACCA"}, "Slack token": {"xox"},
+	"Slack webhook URL": {"hooks.slack.com"}, "Stripe live key": {"sk_live_", "rk_live_"}, "Google API key": {"AIza"},
+	"Hugging Face token": {"hf_"}, "npm token": {"npm_"}, "Notion token": {"ntn_"}, "Linear API key": {"lin_api_"},
+	"SendGrid API key": {"SG."}, "PyPI token": {"pypi-"}, "Groq API key": {"gsk_"}, "OpenRouter API key": {"sk-or-v1-"},
+	"Supabase access token": {"sbp_"}, "DigitalOcean token": {"dop_v1_"}, "Docker Hub token": {"dckr_pat_"},
+	"Replicate API token": {"r8_"}, "Perplexity API key": {"pplx-"}, "Google OAuth access token": {"ya29."},
+	"JSON Web Token": {"eyJ"}, "Private key": {"-----BEGIN"},
 }
 
 var (
 	// key = "value" / "key": "value" where the key name looks like a credential.
 	genericAssignRe = regexp.MustCompile(`(?i)[\w.-]*?(?:api[_-]?key|apikey|secret|token|passw(?:or)?d|pwd|auth[_-]?token|credentials?|private[_-]?key|access[_-]?key|client[_-]?secret)(?:[_.-][\w.-]*)?["']?\s*(?::=|[:=])\s*["']([^"'\s]{8,})["']`)
+	// key: value in YAML/TOML-less formats where the value is not quoted (docker-compose, k8s).
+	yamlAssignRe = regexp.MustCompile(`(?i)^\s*-?\s*[\w.-]*?(?:api[_-]?key|apikey|secret|token|passw(?:or)?d|pwd|auth[_-]?token|private[_-]?key|access[_-]?key|client[_-]?secret)[\w.-]*\s*:\s*([^\s"'#{$<][^\s#]{7,})\s*(?:#.*)?$`)
+	// Credential-looking flag in a client config's args: --api-key=abc / "--token", "abc".
+	secretFlagRe = regexp.MustCompile(`(?i)^--?[\w-]*(?:api[_-]?key|apikey|secret|token|passw(?:or)?d|auth|bearer|credentials?)[\w-]*$`)
+	// ?api_key=abc in an MCP server URL.
+	urlSecretRe = regexp.MustCompile(`(?i)[?&;](?:api[_-]?key|apikey|access[_-]?token|auth[_-]?token|token|key|secret|password|sig|signature)=([^&\s"'#]{12,})`)
 	// Authorization: "Bearer <token>"
 	authHeaderRe = regexp.MustCompile(`(?i)["']?authorization["']?\s*[:=,]\s*["'](?:Bearer|Basic|Token)\s+([^"'\s]{12,})["']`)
 	// KEY=value lines in .env files
@@ -58,6 +88,8 @@ var (
 
 	placeholderRe = regexp.MustCompile(`(?i)example|placeholder|your[_-]|xxx|changeme|change_me|dummy|sample|redacted|\*\*\*|<|>|\$\{|\{\{|%\(|process\.env|os\.environ|getenv|env\(|^\$|test|fake|mock|replace|insert|todo|none|null|undefined|secret_?here|key_?here|token_?here|invalid|0123456|123456789|abcdefgh|qwerty|lorem`)
 	envVarNameRe  = regexp.MustCompile(`^[A-Z][A-Z0-9_]*$`)
+	// Keys that are public by design (client-side ingest and publishable keys).
+	publicKeyRe = regexp.MustCompile(`^(?:phc_|pk_(?:live|test)_|pub_[A-Za-z0-9]{8})`)
 )
 
 func (secretRule) Meta() Meta {
@@ -127,21 +159,52 @@ func (r secretRule) Check(f *source.File) []finding.Finding {
 		}
 	}
 
+	// Credentials passed on the command line or in the URL of a client config entry.
+	for _, s := range f.Servers {
+		for i, a := range s.Args {
+			flag, v := a, ""
+			if eq := strings.IndexByte(a, '='); eq > 0 && strings.HasPrefix(a, "-") {
+				flag, v = a[:eq], a[eq+1:]
+			} else if i+1 < len(s.Args) {
+				v = s.Args[i+1]
+			}
+			if secretFlagRe.MatchString(flag) && len(v) >= 12 && looksLikeSecret(v, 3.0) && !strings.HasPrefix(v, "-") && !strings.Contains(v, "/") {
+				addValue(f.FindLine(v, s.Line), finding.Critical,
+					fmt.Sprintf("Literal credential passed as %q in args of MCP server %q", flag, s.Name), v)
+			}
+		}
+		if m := urlSecretRe.FindStringSubmatch(s.URL); m != nil && looksLikeSecret(m[1], 3.0) {
+			addValue(f.FindLine(m[1], s.Line), finding.Critical,
+				fmt.Sprintf("Credential embedded in the URL of MCP server %q (it ends up in logs and history)", s.Name), m[1])
+		}
+	}
+
 	// Example/template files legitimately contain fake values: only known formats count there.
 	templateFile := templateFileRe.MatchString(path.Base(f.Path))
-	for i, line := range f.Lines {
+	// The generic layers below read the code with comments and multi-line strings blanked: a
+	// docstring or JSDoc example such as `clientSecret: 'my-idp-secret'` is documentation. Known token formats are matched
+	// on the raw line, since a real key pasted into a comment is still a leaked key.
+	codeLines := strings.Split(source.MaskMultilineStrings(f.Code(), f.Language), "\n")
+	for i, raw := range f.Lines {
 		n := i + 1
-		if len(line) > 4000 {
+		if len(raw) > 4000 {
 			continue // minified / generated content
 		}
 		for _, p := range knownSecrets {
-			if loc := p.re.FindStringIndex(line); loc != nil && !strings.Contains(line[loc[0]:loc[1]], "EXAMPLE") {
+			if hints := knownHints[p.name]; hints != nil && !containsAny(raw, hints...) {
+				continue
+			}
+			if loc := p.re.FindStringIndex(raw); loc != nil && !strings.Contains(raw[loc[0]:loc[1]], "EXAMPLE") {
 				add(n, finding.Critical, p.name, loc[0], loc[1])
 				break
 			}
 		}
 		if seen[n] || templateFile {
 			continue
+		}
+		line := raw
+		if i < len(codeLines) && len(codeLines[i]) == len(raw) {
+			line = codeLines[i]
 		}
 		if m := connStringRe.FindStringSubmatchIndex(line); m != nil {
 			pw, host := line[m[2]:m[3]], strings.ToLower(line[m[4]:m[5]])
@@ -155,8 +218,11 @@ func (r secretRule) Check(f *source.File) []finding.Finding {
 			continue
 		}
 		re, sev, kind := genericAssignRe, finding.High, "Possible hard-coded credential"
-		if f.Language == source.Env {
+		switch f.Language {
+		case source.Env:
 			re, kind = envAssignRe, "Credential"
+		case source.YAML:
+			re = yamlAssignRe
 		}
 		for _, m := range re.FindAllStringSubmatchIndex(line, -1) {
 			if v := line[m[2]:m[3]]; len(v) >= 12 && looksLikeSecret(v, 3.0) && !namesItself(v) {
@@ -196,7 +262,7 @@ func namesItself(v string) bool {
 
 // looksLikeSecret filters out placeholders, env var names, identifiers and low-entropy words.
 func looksLikeSecret(v string, minEntropy float64) bool {
-	if len(v) < 8 || isPlaceholder(v) || envVarNameRe.MatchString(v) {
+	if len(v) < 8 || isPlaceholder(v) || envVarNameRe.MatchString(v) || publicKeyRe.MatchString(v) {
 		return false
 	}
 	switch strings.ToLower(v) {

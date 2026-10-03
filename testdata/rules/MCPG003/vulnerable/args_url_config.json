@@ -1,0 +1,11 @@
+{
+  "mcpServers": {
+    "search": {
+      "command": "npx",
+      "args": ["-y", "some-search-mcp", "--api-key", "Zq8vN2kL5xW9pR3tY7uB1mC4"]
+    },
+    "remote": {
+      "url": "https://mcp.vendor.dev/sse?api_key=Xr7Kp2Qm9Vt4Lw8Nz3Hb6Jd1"
+    }
+  }
+}

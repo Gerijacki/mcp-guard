@@ -43,3 +43,7 @@ If the model must choose the program, check it against an explicit allowlist fir
 ## How it is detected
 
 Tool parameters (and values assigned from them) reaching `os.system`, `os.popen`, `subprocess.*(shell=True)`, `asyncio.create_subprocess_shell`, `eval`/`exec`, `child_process.exec`/`execSync` (including promisified variants), `spawn(..., { shell: true })`, `new Function`, `vm.run*`, or `exec.Command("sh", "-c", ...)`. Passing a parameter as the *program* of `subprocess.run([...])`, `spawn`, `execFile` or `exec.Command` is reported as high unless the handler checks an allowlist. `shlex.quote`/`shell-quote` break the flow.
+
+Parameters typed as numbers, booleans, enums or literals (`n: int`, `z.enum([...])`, `RequireInt`) are not tainted: the schema validates them before the handler runs.
+
+Also reported as critical: an interpreter given the command as a string through an argument list, `subprocess.run(["bash", "-c", cmd])` / `execFile("sh", ["-c", cmd])`, which avoids `shell=True` but is the same bug. A list that starts with a literal program (`cmd = ["git", "log", branch]; subprocess.run(cmd)`) is not "the model chooses the program". An allowlist counts when a membership test mentions the tainted value itself (an unrelated `if k in HEADERS` does not). Argument injection into fixed programs is [MCPG012](MCPG012.md); helper functions are followed as in [MCPG001](MCPG001.md).

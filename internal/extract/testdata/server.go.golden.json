@@ -1,0 +1,40 @@
+{
+  "tools": [
+    {
+      "name": "read_file",
+      "line": 14,
+      "params": [
+        "request"
+      ],
+      "description": "Read a file",
+      "param_descriptions": [
+        "Path to read"
+      ],
+      "annotations": {
+        "readonlyhint": "true"
+      },
+      "body_lines": [
+        39,
+        48
+      ]
+    },
+    {
+      "name": "delete_file",
+      "line": 21,
+      "params": [
+        "req"
+      ],
+      "description": "Delete a file",
+      "annotations": {
+        "destructivehint": "true"
+      },
+      "body_lines": [
+        25,
+        34
+      ]
+    }
+  ],
+  "functions": [
+    "handleRead(request)"
+  ]
+}

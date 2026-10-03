@@ -1,0 +1,12 @@
+name: team assistant
+version: 1.0.0
+mcpServers:
+  - name: search
+    command: npx
+    args:
+      - -y
+      - some-search-mcp
+    env:
+      SEARCH_KEY: ${{ secrets.SEARCH_KEY }}
+  - name: remote
+    url: https://mcp.vendor.dev/sse

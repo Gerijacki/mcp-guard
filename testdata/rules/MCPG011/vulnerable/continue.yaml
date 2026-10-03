@@ -1,0 +1,7 @@
+mcpServers:
+  - name: search
+    command: npx
+    args: [-y, some-search-mcp]
+  - name: db
+    command: docker
+    args: [run, -i, --rm, --privileged, "acme/db-mcp:2.0.1"]

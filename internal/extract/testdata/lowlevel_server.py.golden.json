@@ -1,0 +1,30 @@
+{
+  "tools": [
+    {
+      "name": "call_tool",
+      "line": 18,
+      "params": [
+        "arguments"
+      ],
+      "body_lines": [
+        20,
+        23
+      ],
+      "dispatcher": true
+    },
+    {
+      "name": "run",
+      "line": 10,
+      "params": [],
+      "description": "Run a command",
+      "body_lines": [
+        0,
+        0
+      ]
+    }
+  ],
+  "functions": [
+    "call_tool(name,arguments)",
+    "list_tools()"
+  ]
+}

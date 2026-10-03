@@ -1,0 +1,34 @@
+{
+  "tools": [
+    {
+      "name": "review",
+      "kind": "prompt",
+      "line": 12,
+      "params": [
+        "req"
+      ],
+      "description": "Review code",
+      "body_lines": [
+        16,
+        17
+      ]
+    },
+    {
+      "name": "notes",
+      "kind": "resource",
+      "line": 13,
+      "params": [
+        "req"
+      ],
+      "description": "Notes",
+      "body_lines": [
+        20,
+        21
+      ]
+    }
+  ],
+  "functions": [
+    "readNote(req)",
+    "review(req)"
+  ]
+}

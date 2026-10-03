@@ -8,20 +8,33 @@ import (
 )
 
 var (
-	// @mcp.tool, @mcp.tool(), @server.tool(name=...), @app.call_tool()
-	pyDecoratorRe = regexp.MustCompile(`(?m)^[ \t]*@[ \t]*[A-Za-z_][\w.]*\.(tool|call_tool)\b`)
-	pyDefRe       = regexp.MustCompile(`(?m)^([ \t]*)(?:async[ \t]+)?def[ \t]+(\w+)[ \t]*\(`)
-	// mcp.add_tool(fn, name=..., description=...)
-	pyAddToolRe = regexp.MustCompile(`\.add_tool\s*\(\s*(\w+)`)
+	// @mcp.tool, @mcp.tool(), @server.tool(name=...), @app.call_tool(), @mcp.resource("uri"), @mcp.prompt()
+	pyDecoratorRe = regexp.MustCompile(`(?m)^[ \t]*@[ \t]*[A-Za-z_][\w.]*\.(tool|call_tool|resource|prompt)\b`)
+	// @tool / @tool(...) imported directly (fastmcp.tools.tool); only trusted in files that mention MCP.
+	pyBareToolRe = regexp.MustCompile(`(?m)^[ \t]*@[ \t]*(tool)\b`)
+	pyDefRe      = regexp.MustCompile(`(?m)^([ \t]*)(?:async[ \t]+)?def[ \t]+(\w+)[ \t]*\(`)
+	// mcp.add_tool(fn, name=..., description=...) and Tool.from_function(fn, ...)
+	pyAddToolRe = regexp.MustCompile(`(?:\.add_tool\s*\(\s*(\w+)\s*[,)]|\b(?:Function)?Tool\.from_function\s*\(\s*(\w+))`)
 	// types.Tool(name=..., description=..., inputSchema=...) in list_tools handlers
 	pyToolCtorRe  = regexp.MustCompile(`\b(?:types\.)?Tool\s*\(`)
 	pyFieldDescRe = regexp.MustCompile(`\bdescription\s*=\s*`)
 )
 
+var pyReceiverRe = regexp.MustCompile(`@[ \t]*([A-Za-z_][\w.]*)\.\w+$`)
+
+// pyReceiver returns "mcp" for the decorator text "@mcp.tool".
+func pyReceiver(dec string) string {
+	if m := pyReceiverRe.FindStringSubmatch(strings.TrimSpace(dec)); m != nil {
+		return m[1]
+	}
+	return ""
+}
+
 type pyFunc struct {
 	name               string
 	line               int
 	params             []string
+	fixed              []string
 	paramDescs         []string
 	bodyStart, bodyEnd int // lines
 	bodyFrom, bodyTo   int // offsets
@@ -33,7 +46,12 @@ func extractPython(f *source.File) []source.Tool {
 	s := f.Code()
 	var tools []source.Tool
 
-	for _, m := range pyDecoratorRe.FindAllStringSubmatchIndex(s, -1) {
+	k := f.Skeleton() // registrations inside strings (docstring examples) are not tools
+	decorators := pyDecoratorRe.FindAllStringSubmatchIndex(k, -1)
+	if strings.Contains(strings.ToLower(s), "mcp") {
+		decorators = append(decorators, pyBareToolRe.FindAllStringSubmatchIndex(k, -1)...)
+	}
+	for _, m := range decorators {
 		kind := s[m[2]:m[3]]
 		after, argText, argStart := m[1], "", 0
 		if j := source.SkipSpace(s, after); j < len(s) && s[j] == '(' && !strings.Contains(s[after:j], "\n") {
@@ -53,6 +71,7 @@ func extractPython(f *source.File) []source.Tool {
 			continue
 		}
 		t := source.Tool{
+			FixedParams:       fn.fixed,
 			Name:              fn.name,
 			Description:       fn.doc,
 			DescriptionLine:   fn.docLine,
@@ -62,9 +81,13 @@ func extractPython(f *source.File) []source.Tool {
 			Line:              f.LineAt(m[0]),
 		}
 		f.SetBody(&t, fn.bodyFrom, fn.bodyTo)
-		if kind == "call_tool" {
+		t.Receiver = pyReceiver(s[m[0]:m[1]])
+		switch kind {
+		case "call_tool":
 			t.Dispatcher, t.Description, t.DescriptionLine = true, "", 0
 			t.Params = without(fn.params, "name")
+		case "resource", "prompt":
+			t.Kind = kind
 		}
 		if v, _, ok := keyString(argText, "name", source.Python); ok {
 			t.Name = v
@@ -72,12 +95,17 @@ func extractPython(f *source.File) []source.Tool {
 		if v, off, ok := keyString(argText, "description", source.Python); ok {
 			t.Description, t.DescriptionLine = v, f.LineAt(argStart+off)
 		}
+		t.DescriptionDynamic = t.Description == "" && hasKey(argText, "description")
 		tools = append(tools, t)
 	}
 
-	for _, m := range pyAddToolRe.FindAllStringSubmatchIndex(s, -1) {
-		name := s[m[2]:m[3]]
-		defRe := regexp.MustCompile(`(?m)^([ \t]*)(?:async[ \t]+)?def[ \t]+(` + regexp.QuoteMeta(name) + `)[ \t]*\(`)
+	for _, m := range pyAddToolRe.FindAllStringSubmatchIndex(k, -1) {
+		g := 2
+		if m[g] < 0 { // Tool.from_function(fn, ...) is the second alternative
+			g = 4
+		}
+		name := s[m[g]:m[g+1]]
+		defRe := cachedRegexp(`(?m)^([ \t]*)(?:async[ \t]+)?def[ \t]+(` + regexp.QuoteMeta(name) + `)[ \t]*\(`)
 		loc := defRe.FindStringSubmatchIndex(s)
 		if loc == nil {
 			continue
@@ -93,7 +121,7 @@ func extractPython(f *source.File) []source.Tool {
 		}
 		t := source.Tool{
 			Name: fn.name, Description: fn.doc, DescriptionLine: fn.docLine,
-			Params: fn.params, ParamDescriptions: fn.paramDescs, Annotations: parseHints(argText),
+			Params: fn.params, FixedParams: fn.fixed, ParamDescriptions: fn.paramDescs, Annotations: parseHints(argText),
 			Line: f.LineAt(m[0]),
 		}
 		f.SetBody(&t, fn.bodyFrom, fn.bodyTo)
@@ -103,13 +131,14 @@ func extractPython(f *source.File) []source.Tool {
 		if v, off, ok := keyString(argText, "description", source.Python); ok {
 			t.Description, t.DescriptionLine = v, f.LineAt(open+1+off)
 		}
+		t.DescriptionDynamic = t.Description == "" && hasKey(argText, "description")
 		if !hasTool(tools, t.Name) {
 			tools = append(tools, t)
 		}
 	}
 
 	// Metadata-only tool definitions (low-level Server.list_tools style).
-	for _, m := range pyToolCtorRe.FindAllStringIndex(s, -1) {
+	for _, m := range pyToolCtorRe.FindAllStringIndex(k, -1) {
 		open := m[1] - 1
 		close := source.MatchClose(s, open, source.Python)
 		if close < 0 {
@@ -120,10 +149,12 @@ func extractPython(f *source.File) []source.Tool {
 		if !ok || hasTool(tools, name) {
 			continue
 		}
-		t := source.Tool{Name: name, Line: f.LineAt(m[0]), Annotations: parseHints(argText)}
+		t := source.Tool{Name: name, Line: f.LineAt(m[0]), Annotations: parseHints(argText),
+			ParamDescriptions: schemaDescriptions(argText, source.Python)}
 		if v, off, ok := keyString(argText, "description", source.Python); ok {
 			t.Description, t.DescriptionLine = v, f.LineAt(open+1+off)
 		}
+		t.DescriptionDynamic = t.Description == "" && hasKey(argText, "description")
 		tools = append(tools, t)
 	}
 	return tools
@@ -141,6 +172,7 @@ func pyFunction(f *source.File, loc []int) (pyFunc, bool) {
 	}
 	sig := s[open+1 : close]
 	fn.params = pyParams(sig)
+	fn.fixed = pyFixedParams(sig)
 	fn.paramDescs = allStrings(sig, pyFieldDescRe, source.Python)
 
 	colon := strings.IndexByte(s[close:], ':')
@@ -195,6 +227,25 @@ func pyFunction(f *source.File, loc []int) (pyFunc, bool) {
 
 // pyParams returns parameter names from a def signature, skipping self/cls and the
 // MCP Context parameter (which is injected by the framework, not by the model).
+var pyFixedTypeRe = regexp.MustCompile(`^\s*:\s*(?:typing\.)?(?:Optional\[\s*)?(?:Literal\[|int\b|float\b|bool\b|Decimal\b|Enum\b)`)
+
+// pyFixedParams returns the parameters annotated with a type that cannot hold a payload:
+// int, float, bool, Literal[...] (also Optional[...] of those, and "int | None").
+func pyFixedParams(sig string) []string {
+	var out []string
+	for _, seg := range source.SplitArgs(sig, 0, len(sig), source.Python) {
+		p := strings.TrimLeft(seg.Text(sig), "*")
+		i := strings.IndexAny(p, ":=")
+		if i < 0 || p[i] != ':' {
+			continue
+		}
+		if pyFixedTypeRe.MatchString(p[i:]) {
+			out = append(out, strings.TrimSpace(p[:i]))
+		}
+	}
+	return out
+}
+
 func pyParams(sig string) []string {
 	var out []string
 	for _, seg := range source.SplitArgs(sig, 0, len(sig), source.Python) {

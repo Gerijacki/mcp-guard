@@ -200,3 +200,178 @@ func TestCommentedOutToolsAreIgnored(t *testing.T) {
 		}
 	}
 }
+
+func TestPythonResourcesPromptsAndVariants(t *testing.T) {
+	f := load(t, "primitives.py")
+	note := toolByName(t, f, "read_note")
+	if note.Kind != "resource" || !reflect.DeepEqual(note.Params, []string{"path"}) {
+		t.Errorf("resource = %+v", note)
+	}
+	bodyContains(t, f, note, "open(path)")
+	if p := toolByName(t, f, "review"); p.Kind != "prompt" || p.Noun() != "Prompt" {
+		t.Errorf("prompt = %+v", p)
+	}
+	bare := toolByName(t, f, "bare")
+	if bare.Kind != "" || bare.Noun() != "Tool" || !strings.HasPrefix(bare.Description, "A tool registered") {
+		t.Errorf("bare @tool = %+v", bare)
+	}
+	bodyContains(t, f, bare, "os.popen")
+	fromFn := toolByName(t, f, "from_fn")
+	bodyContains(t, f, fromFn, "return q")
+}
+
+func TestTypeScriptResourcesPromptsAndAddTool(t *testing.T) {
+	f := load(t, "primitives.ts")
+	note := toolByName(t, f, "note")
+	if note.Kind != "resource" || note.Description != "" || !reflect.DeepEqual(note.Params, []string{"uri", "id"}) {
+		t.Errorf("resource = %+v", note)
+	}
+	prompt := toolByName(t, f, "review")
+	if prompt.Kind != "prompt" || prompt.Description != "Review some code" {
+		t.Errorf("prompt = %+v", prompt)
+	}
+	run := toolByName(t, f, "run")
+	if run.Kind != "" || run.Description != "Run a command" || !reflect.DeepEqual(run.Params, []string{"args"}) {
+		t.Errorf("addTool = %+v", run)
+	}
+	bodyContains(t, f, run, "args.cmd")
+}
+
+func TestGoPromptsAndResources(t *testing.T) {
+	f := load(t, "primitives.go")
+	prompt := toolByName(t, f, "review")
+	if prompt.Kind != "prompt" || prompt.Description != "Review code" {
+		t.Errorf("prompt = %+v", prompt)
+	}
+	res := toolByName(t, f, "notes")
+	if res.Kind != "resource" || !res.HasBody() {
+		t.Errorf("resource = %+v", res)
+	}
+}
+
+func TestTOMLClientConfig(t *testing.T) {
+	f := load(t, "codex_config.toml")
+	if !f.IsMCPConfig || len(f.Servers) != 3 {
+		t.Fatalf("servers = %+v", f.Servers)
+	}
+	by := map[string]source.ConfigServer{}
+	for _, s := range f.Servers {
+		by[s.Name] = s
+	}
+	gh := by["github"]
+	if gh.Command != "npx" || !reflect.DeepEqual(gh.Args, []string{"-y", "@modelcontextprotocol/server-github"}) || gh.Env["GITHUB_TOKEN"] == "" || gh.Line != 4 {
+		t.Errorf("github = %+v", gh)
+	}
+	if by["docs"].URL != "http://docs.vendor.dev/mcp" {
+		t.Errorf("docs = %+v", by["docs"])
+	}
+	db := by["db"]
+	if !reflect.DeepEqual(db.Args, []string{"run", "-i", "--rm", "acme/db-mcp:2.0.1"}) || db.Env["DB_DSN"] != "${DB_DSN}" {
+		t.Errorf("multi-line array / dotted env table: %+v", db)
+	}
+}
+
+func TestYAMLClientConfig(t *testing.T) {
+	f := load(t, "continue.yaml")
+	if !f.IsMCPConfig || len(f.Servers) != 2 {
+		t.Fatalf("list form: %+v", f.Servers)
+	}
+	if s := f.Servers[1]; s.Name != "search" || !reflect.DeepEqual(s.Args, []string{"-y", "some-search-mcp"}) || s.Line != 4 {
+		t.Errorf("search = %+v", s)
+	}
+	g := load(t, "servers.yaml")
+	if len(g.Servers) != 1 || g.Servers[0].Name != "files" || g.Servers[0].Command != "uvx" || g.Servers[0].Line != 2 {
+		t.Errorf("map form: %+v", g.Servers)
+	}
+	for _, content := range []string{"key: [unclosed", "just: text\nnothing: here\n", "mcpServers: 5\n"} {
+		f := source.NewFile("x.yaml", source.YAML, content)
+		Extract(f)
+		if f.IsMCPConfig || len(f.Servers) != 0 {
+			t.Errorf("%q should not be a client config", content)
+		}
+	}
+}
+
+func TestParseTOMLEdgeCases(t *testing.T) {
+	doc := parseTOML("a.b = 1\n[t]\nk = 'lit # not a comment'  # comment\nlist = [ \"x\",\n  \"y\" ]\ninline = { p = \"1\", q = [\"2\"] }\n\"quoted.key\" = true\n[[array]]\nz = 1\n")
+	tbl, _ := doc["t"].(map[string]any)
+	if tbl["k"] != "lit # not a comment" {
+		t.Errorf("k = %v", tbl["k"])
+	}
+	if l, _ := tbl["list"].([]any); len(l) != 2 || l[1] != "y" {
+		t.Errorf("list = %v", tbl["list"])
+	}
+	if in, _ := tbl["inline"].(map[string]any); in["p"] != "1" {
+		t.Errorf("inline = %v", tbl["inline"])
+	}
+	if ab, _ := doc["a"].(map[string]any); ab["b"] != "1" {
+		t.Errorf("dotted key = %v", doc["a"])
+	}
+	if parseTOML("= = =\n[unclosed\n") == nil {
+		t.Error("garbage must not return nil")
+	}
+}
+
+func TestDynamicDescriptionsAreMarked(t *testing.T) {
+	py := source.NewFile("s.py", source.Python, "DESC = 'x'\n\n@mcp.tool(description=DESC)\ndef a(p: str):\n    return p\n\n@mcp.tool()\ndef b(p: str):\n    return p\n\n@mcp.tool(description=\"literal\")\ndef c(p: str):\n    return p\n")
+	Extract(py)
+	got := map[string][2]bool{}
+	for _, tl := range py.Tools {
+		got[tl.Name] = [2]bool{tl.DescriptionDynamic, tl.Description != ""}
+	}
+	if got["a"] != [2]bool{true, false} || got["b"] != [2]bool{false, false} || got["c"] != [2]bool{false, true} {
+		t.Errorf("python: %v", got)
+	}
+	ts := source.NewFile("s.ts", source.TypeScript, "server.tool(\"x\", DESCRIPTION, { a: z.string() }, async ({ a }) => { return a; });\nserver.tool(\"y\", \"literal\", { a: z.string() }, async ({ a }) => { return a; });\nserver.tool(\"z\", { a: z.string() }, async ({ a }) => { return a; });\nserver.tool(\"w\", `built ${x}`, { a: z.string() }, async ({ a }) => { return a; });\n")
+	Extract(ts)
+	byName := map[string]bool{}
+	for _, tl := range ts.Tools {
+		byName[tl.Name] = tl.DescriptionDynamic
+	}
+	if !byName["x"] || byName["y"] || byName["z"] || byName["w"] { // a template literal is parsed as text
+		t.Errorf("typescript: %v", byName)
+	}
+	g := source.NewFile("s.go", source.Go, "package main\nfunc f() {\n\ts.AddTool(mcp.NewTool(\"t\", mcp.WithDescription(desc)), h)\n\ts.AddTool(mcp.NewTool(\"u\", mcp.WithDescription(\"ok\")), h)\n\ts.AddTool(mcp.NewTool(\"v\"), h)\n}\nfunc h() {}\n")
+	Extract(g)
+	gm := map[string]bool{}
+	for _, tl := range g.Tools {
+		gm[tl.Name] = tl.DescriptionDynamic
+	}
+	if !gm["t"] || gm["u"] || gm["v"] {
+		t.Errorf("go: %v", gm)
+	}
+}
+
+func TestGoDeclarationsOfAddToolAreNotRegistrations(t *testing.T) {
+	src := "package mcp\n\ntype Server struct{}\n\nfunc (s *Server) AddTool(t *Tool, h ToolHandler) {\n\ts.tools = append(s.tools, t)\n}\n\ntype API interface {\n\tAddTool(t *Tool, h ToolHandler)\n}\n\nfunc use(s *Server) {\n\tAddTool(s, &mcp.Tool{Name: \"real\"}, handler)\n}\n\nfunc handler() {}\n"
+	f := source.NewFile("server.go", source.Go, src)
+	Extract(f)
+	var names []string
+	for _, tl := range f.Tools {
+		names = append(names, tl.Name)
+	}
+	if len(names) != 1 || names[0] != "real" {
+		t.Errorf("tools = %v, want only the real registration", names)
+	}
+}
+
+func TestFixedParamsAndQuotedAnnotationKeys(t *testing.T) {
+	py := source.NewFile("s.py", source.Python, "@mcp.tool(annotations={\"title\": \"Delete\", \"destructiveHint\": True})\ndef delete_it(name: str, limit: int, kind: Literal[\"a\", \"b\"], flag: bool = False, maybe: Optional[int] = None, many: list[int] = []):\n    return name\n")
+	Extract(py)
+	if len(py.Tools) != 1 {
+		t.Fatalf("tools = %+v", py.Tools)
+	}
+	tl := py.Tools[0]
+	if tl.Hint("destructiveHint") != "true" {
+		t.Errorf("dict-style annotation not parsed: %v", tl.Annotations)
+	}
+	want := []string{"limit", "kind", "flag", "maybe"}
+	if !reflect.DeepEqual(tl.FixedParams, want) {
+		t.Errorf("FixedParams = %v, want %v (str and list[int] stay tainted)", tl.FixedParams, want)
+	}
+	ts := source.NewFile("s.ts", source.TypeScript, "server.tool(\"x\", \"d\", { path: z.string(), n: z.number().int(), mode: z.enum([\"a\"]), on: z.boolean().optional() }, async ({ path, n, mode, on }) => { return path; });\n")
+	Extract(ts)
+	if len(ts.Tools) != 1 || !reflect.DeepEqual(ts.Tools[0].FixedParams, []string{"n", "mode", "on"}) {
+		t.Errorf("zod fixed params: %+v", ts.Tools)
+	}
+}
