@@ -269,19 +269,13 @@ repos:
           label: tp
           note: Client config launches an unpinned npm/PyPI package or Docker image (low severity, exactly what the rule describes).
     - name: ahujasid/blender-mcp
-      commit: 60d2a31b4632a7bc178f3dd636f7e68dfb5c8ae4
+      commit: 34b7bd277fff75a693cde78930b4359478958a01
       expect:
-        tools: 41
+        tools: 14
         configs: 1
         findings:
-            MCPG001: 1
             MCPG011: 1
       labels:
-        - rule: MCPG001
-          file: src/blender_mcp/server.py
-          tool: generate_hyper3d_model_via_images
-          label: tp
-          note: 'Reads image files by a path the model supplies and uploads them: arbitrary local file read (reviewed in the source).'
         - rule: MCPG011
           file: integrations/codex/plugins/mcp-for-blender/.mcp.json
           label: tp
